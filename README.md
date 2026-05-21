@@ -5,7 +5,7 @@
 | Name | Email | Role |
 |---|---|---|
 | Masuma Begum | masuma.begum@email.com | Full Stack Developer / Tech Lead |
-| Chloe Quijano | chloe.quijano@email.com | Full Stack Developer / Tech Lead |
+| Chloe Quijano | cquijano@myseneca.ca | Full Stack Developer / Tech Lead |
 | Mary-Anne Ibeh | mary-anne.ibeh@email.com | Full Stack Developer / Tech Lead |
 
 ## Project Description
