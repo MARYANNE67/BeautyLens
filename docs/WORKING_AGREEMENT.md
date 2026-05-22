@@ -1,6 +1,6 @@
 # Working Agreement
 
-This document outlines how the SkillCred team will collaborate throughout the SED700 Capstone project.
+This document outlines how the SkillCred team will collaborate throughout the SED800 Capstone project.
 
 **Team Members:** Masuma Begum, Chloe Quijano, Mary-Anne Ibeh
 
@@ -10,10 +10,10 @@ This document outlines how the SkillCred team will collaborate throughout the SE
 
 | Item | Details |
 |---|---|
-| Weekly meeting day | Wednesday |
-| Time | 6:00 PM – 7:00 PM EST |
-| Platform | WhatsApp (group chat: SkillCred Team) |
-| Backup platform | Zoom (link shared in WhatsApp if needed) |
+| Weekly meeting day | Friday |
+| Time | 2:30 PM – 3:10 PM EST |
+| Platform | WhatsApp (group chat: Capstone Team) |
+| Backup platform | Google meet (link shared in WhatsApp if needed) |
 
 Meetings follow a Scrum-style standup format:
 - What did you work on since last meeting?
@@ -80,6 +80,6 @@ Consequences are applied by team consensus, not unilaterally. The first step is 
 - All new features must include at least **manual smoke testing** documented in the PR description before the PR is opened
 - Backend API changes must include at least one passing test (unit or integration) covering the happy path
 - Frontend changes must be visually verified in a browser before requesting review
-- No PR may be approved if it breaks existing functionality — the reviewer is responsible for basic regression checks
+- No PR may be approved if it breaks existing functionality, the reviewer is responsible for basic regression checks
 - Automated test coverage is required for all MUST-priority features before the M.10 Final Release milestone
 - If a known issue cannot be fixed before merging, it must be tracked as a GitHub Issue assigned to the next milestone
