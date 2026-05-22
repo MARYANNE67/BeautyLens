@@ -6,7 +6,7 @@
 |---|---|---|
 | Masuma Begum | mbegum24@myseneca.ca | Full Stack Developer / Tech Lead |
 | Chloe Quijano | cquijano@myseneca.ca | Full Stack Developer / Tech Lead |
-| Mary-Anne Ibeh | mibeh@myseneca.com | Full Stack Developer / Tech Lead |
+| Mary-Anne Ibeh | mibeh@myseneca.ca | Full Stack Developer / Tech Lead |
 
 ## Project Description
 
