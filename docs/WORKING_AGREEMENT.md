@@ -26,8 +26,8 @@ Meetings follow a Scrum-style standup format:
 
 - **Primary channel:** WhatsApp (SkillCred Team group chat)
 - **Expected response time:** Within 24 hours on weekdays; best effort on weekends
-- **Urgent matters:** Message the team member directly in WhatsApp; if no response within 4 hours, follow up via phone call
-- **Meeting notes:** The rotating note-taker posts a summary in the group chat within 24 hours of each meeting
+- **Urgent matters:** Message the team member directly in WhatsApp; if no response within 3-4 hours, follow up via phone call
+- **Meeting notes:** Everyone takes notes of important information shared during the meetings.
 - **Status updates:** Post a brief update in the group chat if you will miss a deadline or need to swap tasks
 
 ---
@@ -52,7 +52,7 @@ Consequences are applied by team consensus, not unilaterally. The first step is 
 
 ### Branch Strategy
 
-- The `main` branch is **protected** — direct pushes are not allowed
+- The `main` branch is **protected** — direct pushes are not allowed, in the expectation of main documentation edits
 - All work is done on feature branches
 - Branch naming convention: `<type>/<short-description>`
   - Examples: `feat/resume-analyser`, `fix/profile-card-overflow`, `docs/working-agreement`
