@@ -6,12 +6,11 @@ import { eq } from "drizzle-orm"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle, Circle } from "lucide-react"
+import { UsernameEditor } from "@/components/profile/username-editor"
 
 export default async function ProfilePage() {
   const supabase = await getSupabaseServer()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) redirect("/login")
 
@@ -21,7 +20,7 @@ export default async function ProfilePage() {
     .where(eq(profiles.user_id, user.id))
     .limit(1)
 
-  if (profileRows.length === 0) redirect("/login")
+  if (profileRows.length === 0) redirect("/onboarding")
 
   const profile = profileRows[0]
 
@@ -32,39 +31,40 @@ export default async function ProfilePage() {
     .orderBy(skills.created_at)
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-2xl">
       <div>
         <h1 className="text-3xl font-bold">Profile</h1>
-        <p className="text-muted-foreground mt-1">Manage your public profile settings and skills.</p>
+        <p className="text-muted-foreground mt-1">Manage your public profile settings.</p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Profile Info</CardTitle>
+          <CardTitle className="text-base">Username</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground w-24">Username</span>
-            <span className="font-medium">@{profile.username}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground w-24">Visibility</span>
-            <Badge variant={profile.visibility === "public" ? "default" : "secondary"}>
-              {profile.visibility}
-            </Badge>
-          </div>
-          {profile.summary && (
-            <div>
-              <span className="text-sm text-muted-foreground">Summary</span>
-              <p className="mt-1 text-sm">{profile.summary}</p>
-            </div>
-          )}
+        <CardContent>
+          <UsernameEditor currentUsername={profile.username} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Skills ({skillRows.length})</CardTitle>
+          <CardTitle className="text-base">Visibility</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center gap-2">
+          <Badge variant={profile.visibility === "public" ? "default" : "secondary"}>
+            {profile.visibility}
+          </Badge>
+          <span className="text-sm text-muted-foreground">
+            {profile.visibility === "public"
+              ? "Your profile is visible to anyone with the link."
+              : "Your profile is only visible to people with your private token."}
+          </span>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Skills ({skillRows.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {skillRows.length === 0 ? (
@@ -78,11 +78,9 @@ export default async function ProfilePage() {
                   key={skill.id}
                   className="flex items-center gap-1.5 border rounded-full px-3 py-1 text-sm"
                 >
-                  {skill.verified ? (
-                    <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-                  ) : (
-                    <Circle className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
+                  {skill.verified
+                    ? <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                    : <Circle className="h-3.5 w-3.5 text-muted-foreground" />}
                   <span>{skill.name}</span>
                   <span className="text-xs text-muted-foreground">
                     {Math.round(skill.confidence_score)}%

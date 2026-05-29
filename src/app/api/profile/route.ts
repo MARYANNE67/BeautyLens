@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { db } from "@/lib/db"
-import { profiles } from "@/lib/db/schema"
+import { profiles, users } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 
 export async function GET(request: NextRequest) {
@@ -25,6 +25,37 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(profileRows[0])
+}
+
+export async function POST(request: NextRequest) {
+  const supabase = await getSupabaseServer()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const { username } = await request.json() as { username: string }
+
+  if (!username || !/^[a-z0-9_-]{3,30}$/.test(username)) {
+    return NextResponse.json({ error: "Invalid username" }, { status: 400 })
+  }
+
+  // Check availability
+  const taken = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.username, username)).limit(1)
+  if (taken.length > 0) {
+    return NextResponse.json({ error: "Username is already taken" }, { status: 409 })
+  }
+
+  // Ensure user row exists
+  await db.insert(users).values({ id: user.id, email: user.email!, role: "student" }).onConflictDoNothing()
+
+  const [created] = await db.insert(profiles).values({
+    user_id: user.id,
+    username,
+    target_roles: [],
+    visibility: "public",
+  }).returning()
+
+  return NextResponse.json(created, { status: 201 })
 }
 
 export async function PATCH(request: NextRequest) {
