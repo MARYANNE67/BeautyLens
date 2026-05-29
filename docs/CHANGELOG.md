@@ -5,6 +5,14 @@ Each entry includes the date, a short description, and a link to the associated 
 
 ---
 
+## 2026-05-29
+
+### Added
+
+- Student auth — role selection page, sign in and sign up with email/password and GitHub OAuth
+
+---
+
 ## 2026-05-28
 
 ### Added
@@ -26,7 +34,7 @@ Each entry includes the date, a short description, and a link to the associated 
 
 ## 2026-05-21
 
-### Docs added
+### Added
 
 - `docs/CHANGELOG.md` to track project changes [#2](https://github.com/SED800/SkillCred/pull/2)
 - `docs/WORKING_AGREEMENT.md` defining team collaboration norms [#3](https://github.com/SED800/SkillCred/pull/3)
