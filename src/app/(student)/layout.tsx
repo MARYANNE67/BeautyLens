@@ -4,20 +4,13 @@ import { db } from "@/lib/db"
 import { profiles } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import Link from "next/link"
+import { LogoutButton } from "@/components/auth/logout-button"
 
-export default async function StudentLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   const supabase = await getSupabaseServer()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) {
-    redirect("/login")
-  }
+  if (!user) redirect("/login")
 
   const profileRows = await db
     .select({ username: profiles.username })
@@ -34,7 +27,7 @@ export default async function StudentLayout({
           <Link href="/dashboard" className="font-bold text-lg">
             SkillCred
           </Link>
-          <nav className="flex items-center gap-6 text-sm">
+          <nav className="flex items-center gap-4 text-sm">
             <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
               Dashboard
             </Link>
@@ -48,14 +41,11 @@ export default async function StudentLayout({
               Analyser
             </Link>
             {username && (
-              <Link
-                href={`/${username}`}
-                className="text-primary font-medium hover:underline"
-                target="_blank"
-              >
+              <Link href="/profile" className="text-primary font-medium hover:underline">
                 @{username}
               </Link>
             )}
+            <LogoutButton />
           </nav>
         </div>
       </header>
