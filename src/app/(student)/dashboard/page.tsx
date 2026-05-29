@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { db } from "@/lib/db"
-import { profiles, skills, evidence, experiences } from "@/lib/db/schema"
+import { profiles, skills, evidence, experiences, users } from "@/lib/db/schema"
 import { eq, count } from "drizzle-orm"
+import { bestUsernameBase, generateUniqueUsername } from "@/lib/utils/username"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
@@ -16,13 +17,29 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/login")
 
-  const profileRows = await db
+  await db
+    .insert(users)
+    .values({ id: user.id, email: user.email!, role: "student" })
+    .onConflictDoNothing()
+
+  let profileRows = await db
     .select()
     .from(profiles)
     .where(eq(profiles.user_id, user.id))
     .limit(1)
 
-  if (profileRows.length === 0) redirect("/login")
+  // Auto-assign username for email/password users who skipped the OAuth callback
+  if (profileRows.length === 0) {
+    const base = bestUsernameBase(user.user_metadata ?? {}, user.email)
+    const username = await generateUniqueUsername(base)
+    await db.insert(profiles).values({
+      user_id: user.id,
+      username,
+      target_roles: [],
+      visibility: "public",
+    })
+    profileRows = await db.select().from(profiles).where(eq(profiles.user_id, user.id)).limit(1)
+  }
 
   const profile = profileRows[0]
 
