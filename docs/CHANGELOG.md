@@ -5,11 +5,13 @@ Each entry includes the date, a short description, and a link to the associated 
 
 ---
 
-## 2026-05-29
+## 2026-05-29 — Authentication
 
 ### Added
 
 - Student auth — role selection page, sign in and sign up with email/password and GitHub OAuth
+- Recruiter auth — sign in and sign up with company name field,
+  recruiter search and shortlist pages
 
 ---
 
