@@ -10,8 +10,8 @@ Each entry includes the date, a short description, and a link to the associated 
 ### Added
 
 - Student auth — role selection page, sign in and sign up with email/password and GitHub OAuth
-- Recruiter auth — sign in and sign up with company name field,
-  recruiter search and shortlist pages
+- Recruiter auth — sign in and sign up with company name field, recruiter search and shortlist pages
+- Logout button in nav and role-based middleware protecting student and recruiter routes
 
 ---
 
