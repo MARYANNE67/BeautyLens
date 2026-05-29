@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import Link from "next/link"
+import { LogoutButton } from "@/components/auth/logout-button"
 
 export default async function RecruiterLayout({ children }: { children: React.ReactNode }) {
   const supabase = await getSupabaseServer()
@@ -22,6 +23,7 @@ export default async function RecruiterLayout({ children }: { children: React.Re
             <Link href="/recruiter/shortlist" className="text-muted-foreground hover:text-foreground transition-colors">
               Shortlist
             </Link>
+            <LogoutButton />
           </nav>
         </div>
       </header>
