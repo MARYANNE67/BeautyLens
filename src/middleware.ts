@@ -13,9 +13,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
@@ -25,25 +23,43 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
+  const role = user?.user_metadata?.role as string | undefined
 
-  const isStudentRoute = pathname.startsWith("/dashboard") ||
+  const isLoginPage =
+    pathname === "/login" ||
+    pathname === "/login/jobseeker" ||
+    pathname === "/login/recruiter"
+
+  const isJobSeekerRoute =
+    pathname.startsWith("/dashboard") ||
     pathname.startsWith("/profile") ||
     pathname.startsWith("/evidence") ||
     pathname.startsWith("/experiences") ||
     pathname.startsWith("/analyser")
 
-  const isRecruiterRoute = pathname.startsWith("/search") ||
-    pathname.startsWith("/shortlist")
+  const isRecruiterRoute = pathname.startsWith("/recruiter")
 
-  if ((isStudentRoute || isRecruiterRoute) && !user) {
-    const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = "/login"
-    return NextResponse.redirect(loginUrl)
+  // Redirect logged-in users away from login pages
+  if (user && isLoginPage) {
+    const url = request.nextUrl.clone()
+    url.pathname = role === "recruiter" ? "/recruiter/search" : "/dashboard"
+    return NextResponse.redirect(url)
+  }
+
+  // Protect job seeker routes
+  if (isJobSeekerRoute && !user) {
+    const url = request.nextUrl.clone()
+    url.pathname = "/login/jobseeker"
+    return NextResponse.redirect(url)
+  }
+
+  // Protect recruiter routes
+  if (isRecruiterRoute && !user) {
+    const url = request.nextUrl.clone()
+    url.pathname = "/login/recruiter"
+    return NextResponse.redirect(url)
   }
 
   return supabaseResponse
