@@ -1,6 +1,6 @@
 # Working Agreement
 
-This document outlines how the SkillCred team will collaborate throughout the SED800 Capstone project.
+This document outlines how the BeautyLens team will collaborate throughout the SED800 Capstone II project.
 
 **Team Members:** Masuma Begum, Chloe Quijano, Mary-Anne Ibeh
 
@@ -24,7 +24,7 @@ Meetings follow a Scrum-style standup format:
 
 ## Communication Expectations
 
-- **Primary channel:** WhatsApp (SkillCred Team group chat)
+- **Primary channel:** WhatsApp (BeautyLens Team group chat)
 - **Expected response time:** Within 24 hours on weekdays; best effort on weekends
 - **Urgent matters:** Message the team member directly in WhatsApp; if no response within 3-4 hours, follow up via phone call
 - **Meeting notes:** Everyone takes notes of important information shared during the meetings.
