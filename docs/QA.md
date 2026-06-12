@@ -356,23 +356,30 @@ The following rules apply to all Pull Requests in the BeautyLens repository:
 ## E. Test File Structure
 
 ```
-sea710-project/
-├── src/
-│   └── tests/
-│       ├── test_product_classes.py     # Unit tests for normalize_class_name, get_display_name
-│       ├── test_api_endpoints.py       # Integration tests for /detect, /detect-face-mesh, /set-confidence
-│       ├── test_face_mesh.py           # Unit tests for get_facial_regions
-│       ├── test_shade_matching.py      # Unit + integration tests for extract_dominant_colour, compare_skin_to_shade, get_shade_recommendation
-│       └── conftest.py                 # Shared fixtures, mock YOLO model, mock MediaPipe, mock colour extractor
-├── mobile/
+beautylens/
+├── backend/
+│   └── src/
+│       ├── api/
+│       │   ├── main.py
+│       │   ├── face_mesh.py
+│       │   └── product_classes.py
+│       └── tests/
+│           ├── conftest.py                 # Shared fixtures, mock YOLO model, mock MediaPipe, mock colour extractor
+│           ├── test_product_classes.py     # Unit tests for normalize_class_name, get_display_name
+│           ├── test_api_endpoints.py       # Integration tests for /detect, /detect-face-mesh, /set-confidence
+│           ├── test_face_mesh.py           # Unit tests for get_facial_regions
+│           └── test_shade_matching.py      # Unit + integration tests for extract_dominant_colour, compare_skin_to_shade, get_shade_recommendation
+├── frontend/
 │   └── __tests__/
-│       ├── productClasses.test.js      # Unit tests for normalizeClassName, getDisplayName
-│       ├── meshOverlays.test.js        # Unit tests for getFacialRegions, renderClassBasedMesh
-│       ├── lookBuilder.test.js         # Unit tests for addProductToLook, removeProductFromLook, clearLook, getLookOverlays
-│       └── shadeDisplay.test.js        # Unit tests for formatShadeRecommendation, getOverlayColourFromProduct, isColourApplicableClass
+│       ├── productClasses.test.js          # Unit tests for normalizeClassName, getDisplayName
+│       ├── meshOverlays.test.js            # Unit tests for getFacialRegions, renderClassBasedMesh
+│       ├── lookBuilder.test.js             # Unit tests for addProductToLook, removeProductFromLook, clearLook, getLookOverlays
+│       └── shadeDisplay.test.js            # Unit tests for formatShadeRecommendation, getOverlayColourFromProduct, isColourApplicableClass
+├── docs/
+│   └── QA.md
 └── .github/
     └── workflows/
-        └── ci.yml                      # GitHub Actions CI pipeline
+        └── ci.yml                          # GitHub Actions CI pipeline
 ```
 
 ---
