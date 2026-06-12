@@ -1,50 +1,66 @@
-# Virtual Environment
-venv/
-env/
-ENV/
-.venv/
-env.bak/
-venv.bak/
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-
-# Node.js / React Native
+# dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-package-lock.json
-yarn.lock
 
 # Expo
 .expo/
 .expo-shared/
 dist/
 web-build/
+expo-env.d.ts
 
-# React Native
+# Native
+.kotlin/
+*.orig.*
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
-*.orig.*
 *.hprof
 
-# OS
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.pnpm-debug.log*
+
+# macOS / OS
 .DS_Store
 Thumbs.db
+*.pem
 
-# environment variables
+# local env files
 .env
 .env.local
+.env*.local
 mobile/.env
 
+# typescript
+*.tsbuildinfo
 
+example
+
+# generated native folders
+/ios
+/android
+
+# Python
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ML models
 models/final/*.pt
