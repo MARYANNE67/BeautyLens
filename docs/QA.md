@@ -384,7 +384,7 @@ The following rules apply to all Pull Requests in the BeautyLens repository:
 ## F. Test File Structure
 
 ```
-sea710-project/
+beautylens/
 ├── src/
 │   └── tests/
 │       ├── test_product_classes.py     # Unit tests for normalize_class_name, get_display_name
@@ -392,7 +392,7 @@ sea710-project/
 │       ├── test_face_mesh.py           # Unit tests for get_facial_regions
 │       ├── test_shade_matching.py      # Unit + integration tests for extract_dominant_colour, compare_skin_to_shade, get_shade_recommendation
 │       └── conftest.py                 # Shared fixtures, mock YOLO model, mock MediaPipe, mock colour extractor
-├── mobile/
+├── src/
 │   └── __tests__/
 │       ├── productClasses.test.js      # Unit tests for normalizeClassName, getDisplayName
 │       ├── meshOverlays.test.js        # Unit tests for getFacialRegions, renderClassBasedMesh
