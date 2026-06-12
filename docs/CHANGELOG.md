@@ -4,6 +4,15 @@ All notable changes to BeautyLens will be documented in this file.
 
 ---
 
+## 2026-06-12
+
+### Added
+
+- Root-level `.gitignore` covering macOS, editor, environment, log, and build output files
+- `beautylens/.gitignore` (Expo-generated) retained for app-specific ignores — both files are kept as they serve different scopes
+
+---
+
 ## 2026-06-11
 
 ### Changed
