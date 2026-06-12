@@ -31,6 +31,9 @@ jobs:
       - name: Test
         run: npx jest --passWithNoTests
 
+      - name: Expo export
+        run: npx expo export --platform web 2>&1 | grep -v "^warn"
+
   backend:
     name: Backend — Lint & Test
     runs-on: ubuntu-latest
@@ -48,11 +51,17 @@ jobs:
           cache-dependency-path: beautylens/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r beautylens/requirements.txt pylint pytest httpx pytest-asyncio
+        run: pip install -r beautylens/requirements.txt pylint pytest pytest-cov httpx pytest-asyncio
 
       - name: Pylint
         run: pylint beautylens/src/api/ --errors-only
 
       - name: PyTest
         # exit code 5 = no tests collected — passes until test files are added
-        run: pytest beautylens/src/tests/ -q || [ $? -eq 5 ]
+        # coverage enforcement kicks in once tests exist
+        run: |
+          pytest beautylens/src/tests/ -q \
+            --cov=beautylens/src/api \
+            --cov-fail-under=80 \
+            --cov-report=term-missing \
+            || [ $? -eq 5 ]
