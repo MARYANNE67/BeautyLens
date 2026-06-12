@@ -18,9 +18,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: beautylens/package-lock.json
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: TypeScript
         run: npx tsc --noEmit
@@ -52,6 +54,9 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r beautylens/requirements.txt pylint pytest pytest-cov httpx pytest-asyncio
+        env:
+          PIP_NO_DEPS: "false"
+          MEDIAPIPE_DISABLE_GPU: "1"
 
       - name: Pylint
         run: pylint beautylens/src/api/ --errors-only
