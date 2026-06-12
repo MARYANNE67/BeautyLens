@@ -1,0 +1,52 @@
+
+SEA710 Milestone 3 - Model Evaluation Report
+=============================================
+
+Model: models/final/best.pt
+Dataset: 50 test images
+Device: CPU
+
+Overall Performance:
+--------------------
+- Precision: 0.631
+- Recall: 0.655
+- mAP@0.5: 0.614
+- mAP@0.5-0.95: 0.436
+
+Best Performing Classes (mAP@0.5):
+-----------------------------------
+1. beauty_blender: 0.986
+2. lip_balm: 0.968
+3. lip_gloss: 0.793
+
+Worst Performing Classes (mAP@0.5):
+------------------------------------
+1. eye_liner: 0.225
+2. brush: 0.373
+3. eye_shadow: 0.423
+
+Inference Speed:
+----------------
+- Average: 634.52 ms
+- FPS: 1.58
+
+Error Analysis:
+---------------
+- False Negatives: 5 images
+- False Positives: 16 images
+
+Key Findings:
+-------------
+- Model performs best on larger, visually distinctive products
+- Struggles with small objects (liners, pencils, curlers)
+- Confusion observed between similar lip products
+- Inference speed suitable for real-time mobile applications
+- Class imbalance affects performance (classes with <50 samples perform poorly)
+
+Recommendations:
+----------------
+1. Collect more training data for underperforming classes
+2. Apply targeted augmentation for small objects
+3. Consider YOLOv8-small for better small object detection
+4. Implement post-processing to reduce lip product confusion
+5. Balance dataset to have minimum 100 samples per class

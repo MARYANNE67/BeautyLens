@@ -1,0 +1,30 @@
+names:
+- beauty blender
+- blush
+- bronzer
+- brush
+- concealer
+- eye liner
+- eye shadow
+- eyelash curler
+- foundation
+- highlighter
+- lip balm
+- lip gloss
+- lip liner
+- lip stick
+- mascara
+- nail polish
+- powder
+- primer
+- setting spray
+nc: 19
+roboflow:
+  license: CC BY 4.0
+  project: makeup-products-detection-ld6us
+  url: https://universe.roboflow.com/sea710-makeup-detection/makeup-products-detection-ld6us/dataset/7
+  version: 7
+  workspace: sea710-makeup-detection
+test: ../test/images
+train: ../train/images
+val: ../valid/images
