@@ -326,7 +326,35 @@ Shade matching extracts skin tone from the face oval region. The extracted LAB c
 
 ---
 
-## C. Pull Request Quality Rules
+---
+
+## C. CI Pipeline (`ci.yml`)
+
+The GitHub Actions workflow runs on every Pull Request targeting `main`. Both jobs must pass before merge is permitted.
+
+### Frontend job
+
+| Step | Tool | Failure condition |
+|---|---|---|
+| TypeScript type check | `tsc --noEmit` | Any type error |
+| Lint | `expo lint` (ESLint) | Any error (zero errors required) |
+| Unit tests | Jest `--passWithNoTests` | Any test failure |
+| Expo export | `expo export --platform web` | Bundler error — missing asset, broken import, or component that crashes the build |
+
+The Expo export step verifies the app produces a valid production bundle. It catches issues that TypeScript and ESLint cannot — such as missing image assets, unresolved module paths, or runtime-crashing components — because it actually executes the bundler rather than statically analysing the code.
+
+### Backend job
+
+| Step | Tool | Failure condition |
+|---|---|---|
+| Pylint | `pylint src/api/ --errors-only` | Any error (zero errors required) |
+| PyTest + coverage | `pytest --cov=src/api --cov-fail-under=80` | Any test failure, or coverage drops below 80% |
+
+Coverage reporting uses `--cov-report=term-missing` to print uncovered lines directly in the CI log. The 80% threshold aligns with the minimum coverage goal in Section B. Exit code 5 (no tests collected) is treated as a pass until test files are added.
+
+---
+
+## D. Pull Request Quality Rules
 
 The following rules apply to all Pull Requests in the BeautyLens repository:
 
@@ -342,7 +370,7 @@ The following rules apply to all Pull Requests in the BeautyLens repository:
 
 ---
 
-## D. Testing Responsibilities
+## E. Testing Responsibilities
 
 | Team Member | Responsibility |
 |---|---|
@@ -353,7 +381,7 @@ The following rules apply to all Pull Requests in the BeautyLens repository:
 
 ---
 
-## E. Test File Structure
+## F. Test File Structure
 
 ```
 sea710-project/
