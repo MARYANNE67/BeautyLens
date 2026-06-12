@@ -8,8 +8,11 @@ All notable changes to BeautyLens will be documented in this file.
 
 ### Added
 
+- `.github/workflows/ci.yml` — GitHub Actions CI pipeline that runs on every PR to `main`
+  - **Frontend job**: TypeScript type check (`tsc --noEmit`), ESLint via `expo lint` (zero errors required), Jest with `--passWithNoTests`
+  - **Backend job**: Pylint on `src/api/` (zero errors required), PyTest on `src/tests/` (gracefully passes until test files are added), installs all Python deps including OpenCV/MediaPipe system dependencies
 - Root-level `.gitignore` covering macOS, editor, environment, log, and build output files
-- `beautylens/.gitignore` (Expo-generated) retained for app-specific ignores — both files are kept as they serve different scopes
+- `beautylens/.gitignore` updated to combine Expo/React Native and Python/ML entries — merged conflict between both branches
 
 ---
 
