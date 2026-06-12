@@ -64,9 +64,8 @@ function landmarksToPoints(
 
 export default function FaceCameraScreen() {
   const router = useRouter();
-  const { productType, productName } = useLocalSearchParams<{
+  const { productType } = useLocalSearchParams<{
     productType: string;
-    productName: string;
     productImageUrl?: string;
   }>();
 
@@ -78,27 +77,6 @@ export default function FaceCameraScreen() {
   const [photoDimensions, setPhotoDimensions] = useState({ width: 1, height: 1 });
   const cameraRef = useRef<any>(null);
   const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const persistentMeshRef = useRef<FaceMeshResult | null>(null);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      if (FeatureFlags.ENABLE_FACE_MESH) startFaceDetection();
-      return () => {
-        if (detectionIntervalRef.current) {
-          clearInterval(detectionIntervalRef.current);
-          detectionIntervalRef.current = null;
-        }
-        setFaceMeshData(null);
-        setFaceDetected(false);
-      };
-    }, [])
-  );
-
-  const startFaceDetection = () => {
-    detectionIntervalRef.current = setInterval(() => {
-      if (!isDetecting && cameraRef.current) detectFace();
-    }, FACE_DETECTION_INTERVAL);
-  };
 
   const detectFace = async () => {
     if (!cameraRef.current || isDetecting) return;
@@ -130,7 +108,6 @@ export default function FaceCameraScreen() {
           };
           setPhotoDimensions(imgDims);
           setFaceMeshData(result);
-          persistentMeshRef.current = result;
           setFaceDetected(true);
         } else {
           setFaceDetected(false);
@@ -143,8 +120,28 @@ export default function FaceCameraScreen() {
     }
   };
 
+  const startFaceDetection = () => {
+    detectionIntervalRef.current = setInterval(() => {
+      if (!isDetecting && cameraRef.current) detectFace();
+    }, FACE_DETECTION_INTERVAL);
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (FeatureFlags.ENABLE_FACE_MESH) startFaceDetection();
+      return () => {
+        if (detectionIntervalRef.current) {
+          clearInterval(detectionIntervalRef.current);
+          detectionIntervalRef.current = null;
+        }
+        setFaceMeshData(null);
+        setFaceDetected(false);
+      };
+    }, [])
+  );
+
   const renderOverlay = () => {
-    const mesh = faceMeshData ?? persistentMeshRef.current;
+    const mesh = faceMeshData;
     if (!mesh?.landmarks || !mesh.facial_regions) return null;
 
     const normalizedType = productType?.toLowerCase().trim() ?? '';
@@ -258,7 +255,6 @@ export default function FaceCameraScreen() {
           style={styles.controlBtn}
           onPress={() => {
             setFaceMeshData(null);
-            persistentMeshRef.current = null;
             setFaceDetected(false);
           }}
         >

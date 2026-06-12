@@ -4,7 +4,7 @@
  * with options to try virtual look or dismiss
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -31,7 +31,7 @@ export default function ProductCard({
   onDismiss,
   onTryVirtualLook,
 }: ProductCardProps) {
-  const slideAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const [slideAnim] = useState(() => new Animated.Value(SCREEN_HEIGHT));
 
   // Products that don't support virtual try-on
   const NO_VIRTUAL_TRYON: string[] = ['brush', 'eyelash curler', 'beauty blender'];
@@ -45,7 +45,7 @@ export default function ProductCard({
       tension: 50,
       friction: 8,
     }).start();
-  }, []);
+  }, [slideAnim]);
 
   const handleDismiss = () => {
     Animated.timing(slideAnim, {
