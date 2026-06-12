@@ -88,7 +88,7 @@ Unit tests verify individual functions in isolation, without calling the API or 
 
 **Minimum coverage goal:** 80% coverage on all utility and helper functions
 
-#### Backend — PyTest (`src/tests/`)
+#### Backend — PyTest (`tests/`)
 
 The following functions in `src/api/product_classes.py` are unit tested:
 
@@ -114,7 +114,7 @@ The `/set-confidence` endpoint logic is also unit tested:
 | `POST /set-confidence { "threshold": -0.1 }` | Returns 400 — out of range |
 | `POST /set-confidence {}` | Returns 400 — missing field |
 
-Shade matching unit tests (`src/tests/test_shade_matching.py`):
+Shade matching unit tests (`tests/test_shade_matching.py`):
 
 | Function | Test Cases |
 |---|---|
@@ -129,7 +129,7 @@ Shade matching unit tests (`src/tests/test_shade_matching.py`):
 | `get_shade_recommendation(class_name, skin_lab, product_lab)` | Returns `None` for non-colour classes (e.g., `"eyelash curler"`, `"brush"`) |
 | `get_shade_recommendation(class_name, skin_lab, product_lab)` | Returns a recommendation string for colour classes (lip_stick, foundation, blush, etc.) |
 
-#### Frontend — Jest (`src/__tests__/`)
+#### Frontend — Jest (co-located `*.test.js` files)
 
 The following functions in `src/utils/productClasses.js` are unit tested:
 
@@ -384,17 +384,21 @@ The following rules apply to all Pull Requests in the BeautyLens repository:
 ```
 beautylens/
 ├── src/
-│   ├── tests/
-│   │   ├── test_product_classes.py     # Unit tests for normalize_class_name, get_display_name
-│   │   ├── test_api_endpoints.py       # Integration tests for /detect, /detect-face-mesh, /set-confidence
-│   │   ├── test_face_mesh.py           # Unit tests for get_facial_regions
-│   │   ├── test_shade_matching.py      # Unit + integration tests for extract_dominant_colour, compare_skin_to_shade, get_shade_recommendation
-│   │   └── conftest.py                 # Shared fixtures, mock YOLO model, mock MediaPipe, mock colour extractor
-│   └── __tests__/
+│   └── utils/
+│       ├── productClasses.js
 │       ├── productClasses.test.js      # Unit tests for normalizeClassName, getDisplayName
+│       ├── meshOverlays.js
 │       ├── meshOverlays.test.js        # Unit tests for getFacialRegions, renderClassBasedMesh
+│       ├── lookBuilder.js
 │       ├── lookBuilder.test.js         # Unit tests for addProductToLook, removeProductFromLook, clearLook, getLookOverlays
+│       ├── shadeDisplay.js
 │       └── shadeDisplay.test.js        # Unit tests for formatShadeRecommendation, getOverlayColourFromProduct, isColourApplicableClass
+├── tests/
+│   ├── test_product_classes.py         # Unit tests for normalize_class_name, get_display_name
+│   ├── test_api_endpoints.py           # Integration tests for /detect, /detect-face-mesh, /set-confidence
+│   ├── test_face_mesh.py               # Unit tests for get_facial_regions
+│   ├── test_shade_matching.py          # Unit + integration tests for extract_dominant_colour, compare_skin_to_shade, get_shade_recommendation
+│   └── conftest.py                     # Shared fixtures, mock YOLO model, mock MediaPipe, mock colour extractor
 └── .github/
     └── workflows/
         └── ci.yml                      # GitHub Actions CI pipeline
