@@ -5,6 +5,7 @@ node_modules/
 
 # Expo
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
@@ -17,6 +18,7 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+*.hprof
 
 # Metro
 .metro-health-check*
@@ -25,13 +27,18 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+.pnpm-debug.log*
 
-# macOS
+# macOS / OS
 .DS_Store
+Thumbs.db
 *.pem
 
 # local env files
+.env
+.env.local
 .env*.local
+mobile/.env
 
 # typescript
 *.tsbuildinfo
@@ -41,3 +48,19 @@ example
 # generated native folders
 /ios
 /android
+
+# Python
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ML models
+models/final/*.pt
