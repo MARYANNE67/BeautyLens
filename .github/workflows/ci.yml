@@ -59,7 +59,7 @@ jobs:
           MEDIAPIPE_DISABLE_GPU: "1"
 
       - name: Pylint
-        run: pylint beautylens/src/api/ --errors-only --extension-pkg-whitelist=cv2,mediapipe
+        run: pylint beautylens/src/api/ --errors-only --ignored-modules=cv2,mediapipe
 
       - name: PyTest
         # exit code 5 = no tests collected — passes until test files are added
