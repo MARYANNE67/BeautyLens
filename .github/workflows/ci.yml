@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Frontend — Type Check, Lint & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: beautylens
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: beautylens/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npx jest --passWithNoTests
+
+      - name: Expo export
+        run: npx expo export --platform web 2>&1 | grep -v "^warn"
+
+  backend:
+    name: Backend — Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System dependencies
+        run: sudo apt-get install -y libgl1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: beautylens/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r beautylens/requirements.txt pylint pytest pytest-cov httpx pytest-asyncio
+        env:
+          PIP_NO_DEPS: "false"
+          MEDIAPIPE_DISABLE_GPU: "1"
+
+      - name: Pylint
+        run: pylint beautylens/src/api/ --errors-only --ignored-modules=cv2,mediapipe
+
+      - name: PyTest
+        run: |
+          if find beautylens/src/tests -name "test_*.py" | grep -q .; then
+            pytest beautylens/src/tests/ -q \
+              --cov=beautylens/src/api \
+              --cov-fail-under=80 \
+              --cov-report=term-missing
+          else
+            echo "No test files found — skipping coverage enforcement"
+          fi
