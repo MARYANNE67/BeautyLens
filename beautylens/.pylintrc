@@ -1,3 +1,0 @@
-[MASTER]
-# cv2 and mediapipe are C extensions — pylint cannot inspect their members statically
-extension-pkg-whitelist=cv2,mediapipe
