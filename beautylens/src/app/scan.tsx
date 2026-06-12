@@ -10,7 +10,6 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
-  Dimensions,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
@@ -88,57 +87,6 @@ export default function ScanProductScreen() {
   const apiStatusRef = useRef<ApiStatus>(apiStatus);
   const isDetectingRef = useRef(false);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      if (!USE_MOCK_DETECTIONS) checkApiHealth();
-      else setApiStatus('ready');
-      startContinuousDetection();
-
-      return () => {
-        if (detectionIntervalRef.current) {
-          clearInterval(detectionIntervalRef.current);
-          detectionIntervalRef.current = null;
-        }
-        setDetections([]);
-        setSelectedProduct(null);
-      };
-    }, [])
-  );
-
-  useEffect(() => {
-    apiStatusRef.current = apiStatus;
-  }, [apiStatus]);
-
-  useEffect(() => {
-    isDetectingRef.current = isDetecting;
-  }, [isDetecting]);
-
-  const checkApiHealth = async () => {
-    try {
-      const health = await getHealthStatus(API_BASE_URL);
-      const newStatus: ApiStatus = health.model_loaded ? 'ready' : 'no_model';
-      setApiStatus(newStatus);
-      apiStatusRef.current = newStatus;
-    } catch {
-      setApiStatus('offline');
-      apiStatusRef.current = 'offline';
-    }
-  };
-
-  const startContinuousDetection = () => {
-    detectionIntervalRef.current = setInterval(() => {
-      const currentApiStatus = apiStatusRef.current;
-      const currentlyDetecting = isDetectingRef.current;
-
-      if (USE_MOCK_DETECTIONS) {
-        if (!currentlyDetecting) captureAndDetect();
-      } else {
-        if (currentlyDetecting || !cameraRef.current || currentApiStatus !== 'ready') return;
-        captureAndDetect();
-      }
-    }, DETECTION_INTERVAL);
-  };
-
   const captureAndDetect = async () => {
     if (!USE_MOCK_DETECTIONS && (!cameraRef.current || isDetecting)) return;
 
@@ -194,6 +142,57 @@ export default function ScanProductScreen() {
       isDetectingRef.current = false;
     }
   };
+
+  const checkApiHealth = async () => {
+    try {
+      const health = await getHealthStatus(API_BASE_URL);
+      const newStatus: ApiStatus = health.model_loaded ? 'ready' : 'no_model';
+      setApiStatus(newStatus);
+      apiStatusRef.current = newStatus;
+    } catch {
+      setApiStatus('offline');
+      apiStatusRef.current = 'offline';
+    }
+  };
+
+  const startContinuousDetection = () => {
+    detectionIntervalRef.current = setInterval(() => {
+      const currentApiStatus = apiStatusRef.current;
+      const currentlyDetecting = isDetectingRef.current;
+
+      if (USE_MOCK_DETECTIONS) {
+        if (!currentlyDetecting) captureAndDetect();
+      } else {
+        if (currentlyDetecting || !cameraRef.current || currentApiStatus !== 'ready') return;
+        captureAndDetect();
+      }
+    }, DETECTION_INTERVAL);
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!USE_MOCK_DETECTIONS) checkApiHealth();
+      else setApiStatus('ready');
+      startContinuousDetection();
+
+      return () => {
+        if (detectionIntervalRef.current) {
+          clearInterval(detectionIntervalRef.current);
+          detectionIntervalRef.current = null;
+        }
+        setDetections([]);
+        setSelectedProduct(null);
+      };
+    }, [])
+  );
+
+  useEffect(() => {
+    apiStatusRef.current = apiStatus;
+  }, [apiStatus]);
+
+  useEffect(() => {
+    isDetectingRef.current = isDetecting;
+  }, [isDetecting]);
 
   const handleTryVirtualLook = (product: Detection) => {
     const normalized = normalizeClassName(product.label) ?? product.label;
