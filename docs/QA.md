@@ -1,12 +1,12 @@
 # BeautyLens — Quality Assurance & Testing Strategy
 
-**Project:** BeautyLens — Makeup Product Detection & AR Virtual Try-On  
-**Course:** SED800 Capstone II  
-**Team:** Masuma Begum, Chloe Quijano, Mary-Anne Ibeh  
-**Repository:** `https://github.com/SED800/SkillCred`  
+**Project:** BeautyLens — Makeup Product Detection & AR Virtual Try-On
+**Course:** SED800 Capstone II
+**Team:** Masuma Begum, Chloe Quijano, Mary-Anne Ibeh
+**Repository:** `https://github.com/SED800/SkillCred`
 **Last Updated:** June 2026
-# BeautyLens — Quality Assurance & Testing Strategy
 
+---
 
 ## A. Testing Goals
 
@@ -52,8 +52,6 @@ These are the highest-risk failures for BeautyLens — the ones that would make 
 
 ## B. Planned Types of Testing
 
----
-
 ### 1. Smoke Testing (Manual)
 
 Smoke testing is performed manually after each deployment or major code change. It verifies the system is fundamentally working before running the full test suite.
@@ -73,6 +71,7 @@ Smoke testing is performed manually after each deployment or major code change. 
 - [ ] Test passes on at least one iOS device and one Android device
 
 **Visual checks that cannot be automated:**
+
 - AR overlay colour accuracy (shade matching quality is subjective)
 - Overlay polygon alignment to the face (mesh rendering quality)
 - Stacked overlay visual harmony — no jarring colour conflicts between layers
@@ -115,7 +114,7 @@ The `/set-confidence` endpoint logic is also unit tested:
 | `POST /set-confidence { "threshold": -0.1 }` | Returns 400 — out of range |
 | `POST /set-confidence {}` | Returns 400 — missing field |
 
-**New — Shade Matching unit tests (`src/tests/test_shade_matching.py`):**
+Shade matching unit tests (`src/tests/test_shade_matching.py`):
 
 | Function | Test Cases |
 |---|---|
@@ -130,9 +129,9 @@ The `/set-confidence` endpoint logic is also unit tested:
 | `get_shade_recommendation(class_name, skin_lab, product_lab)` | Returns `None` for non-colour classes (e.g., `"eyelash curler"`, `"brush"`) |
 | `get_shade_recommendation(class_name, skin_lab, product_lab)` | Returns a recommendation string for colour classes (lip_stick, foundation, blush, etc.) |
 
-#### Frontend — Jest (`mobile/__tests__/`)
+#### Frontend — Jest (`src/__tests__/`)
 
-The following functions in `mobile/utils/productClasses.js` are unit tested:
+The following functions in `src/utils/productClasses.js` are unit tested:
 
 | Function | Test Cases |
 |---|---|
@@ -146,7 +145,7 @@ The following functions in `mobile/utils/productClasses.js` are unit tested:
 | `getDisplayName()` | `"eye liner"` → `"Eye Liner"` |
 | `isValidClass()` | `"mascara"` → `true`, `"unknown"` → `false` |
 
-The following functions in `mobile/utils/meshOverlays.js` are unit tested:
+The following functions in `src/utils/meshOverlays.js` are unit tested:
 
 | Function | Test Cases |
 |---|---|
@@ -158,7 +157,7 @@ The following functions in `mobile/utils/meshOverlays.js` are unit tested:
 | `renderClassBasedMesh()` | `"eye liner"` maps to eye mesh renderer |
 | `renderClassBasedMesh()` | Returns `null` when `landmarks` array is empty |
 
-**New — Multi-product look state unit tests (`mobile/__tests__/lookBuilder.test.js`):**
+Multi-product look state unit tests (`src/__tests__/lookBuilder.test.js`):
 
 | Function | Test Cases |
 |---|---|
@@ -172,7 +171,7 @@ The following functions in `mobile/utils/meshOverlays.js` are unit tested:
 | `hasProductInLook(className)` | Returns `true` when class is in current look, `false` otherwise |
 | `getProductCountInLook()` | Returns correct count after adding and removing products |
 
-**New — Shade matching display unit tests (`mobile/__tests__/shadeDisplay.test.js`):**
+Shade matching display unit tests (`src/__tests__/shadeDisplay.test.js`):
 
 | Function | Test Cases |
 |---|---|
@@ -219,7 +218,7 @@ Integration tests verify that system components work correctly together. These t
 | After a successful `/detect` call | A session log record is written to SQLite with `class_name`, `confidence`, and `timestamp` |
 | Multiple sequential `/detect` calls | One record per call in the database, no duplicates |
 
-#### New — Shade Matching Integration
+#### Shade Matching Integration
 
 | Test | Input | Expected Result |
 |---|---|---|
@@ -228,7 +227,7 @@ Integration tests verify that system components work correctly together. These t
 | Full shade match pipeline: detect product → extract product colour → extract skin tone → compare | Real product + real face | `compare_skin_to_shade()` returns one of `"good_match"`, `"try_lighter"`, `"try_darker"` |
 | Shade matching for non-colour class (e.g., `"brush"`) | Any image | `get_shade_recommendation()` returns `None` — no recommendation generated |
 
-#### New — Multi-Product Look Building Integration
+#### Multi-Product Look Building Integration
 
 | Test | Steps | Expected Result |
 |---|---|---|
@@ -281,6 +280,7 @@ Performance testing verifies that BeautyLens meets its latency targets for a liv
 | `/detect` under load | 10 concurrent requests | No errors, all return within 1 s | `pytest` with `asyncio` concurrent tasks |
 
 **Bottleneck risks:**
+
 - YOLO inference on CPU is the most likely bottleneck for `/detect`. Mitigation: resize to 640×640 in the app before upload.
 - K-means colour extraction runs on each product bbox and the face oval region. With k=3 and a cropped region this should be < 100 ms on CPU. If slower, reduce k to 1 (mean colour) as a fallback.
 - Stacking 3+ overlays in `FaceCameraScreen` increases polygon rendering work per frame. Mitigation: batch overlay renders into a single SVG/Canvas draw call rather than one per product.
@@ -326,11 +326,9 @@ Shade matching extracts skin tone from the face oval region. The extracted LAB c
 
 ---
 
----
-
 ## C. CI Pipeline (`ci.yml`)
 
-The GitHub Actions workflow runs on every Pull Request targeting `main`. Both jobs must pass before merge is permitted.
+The GitHub Actions workflow runs on every Pull Request to `main` and every push to `main`. Both jobs must pass before merge is permitted.
 
 ### Frontend job
 
@@ -350,7 +348,7 @@ The Expo export step verifies the app produces a valid production bundle. It cat
 | Pylint | `pylint src/api/ --errors-only` | Any error (zero errors required) |
 | PyTest + coverage | `pytest --cov=src/api --cov-fail-under=80` | Any test failure, or coverage drops below 80% |
 
-Coverage reporting uses `--cov-report=term-missing` to print uncovered lines directly in the CI log. The 80% threshold aligns with the minimum coverage goal in Section B. Exit code 5 (no tests collected) is treated as a pass until test files are added.
+Coverage reporting uses `--cov-report=term-missing` to print uncovered lines directly in the CI log. The 80% threshold aligns with the minimum coverage goal in Section B. Coverage enforcement is skipped until test files are present.
 
 ---
 
@@ -401,6 +399,28 @@ beautylens/
     └── workflows/
         └── ci.yml                      # GitHub Actions CI pipeline
 ```
+
+---
+
+## G. Testing Backlog — GitHub Issues
+
+The following GitHub Issues track outstanding testing and quality assurance work. Each issue should be linked to its corresponding PR when resolved.
+
+| Issue | Type | Assigned To |
+|---|---|---|
+| Create unit tests for `normalize_class_name()` and `product_classes.py` | Backend unit tests | Masuma Begum |
+| Create unit tests for `/set-confidence` endpoint | Backend unit tests | Masuma Begum |
+| Create unit tests for `extract_dominant_colour()` and shade matching pipeline | Backend unit tests | Masuma Begum |
+| Create integration tests for `/detect` and `/detect-face-mesh` endpoints | Backend integration tests | Masuma Begum |
+| Create integration tests for shade matching full pipeline | Backend integration tests | Masuma Begum |
+| Create `conftest.py` with mock YOLO model, mock MediaPipe, and mock colour extractor | Backend test fixtures | Masuma Begum |
+| Create Jest unit tests for `productClasses.js` | Frontend unit tests | Mary-Anne Ibeh |
+| Create Jest unit tests for `meshOverlays.js` | Frontend unit tests | Mary-Anne Ibeh |
+| Create Jest unit tests for look builder state (`lookBuilder.test.js`) | Frontend unit tests | Mary-Anne Ibeh |
+| Create Jest unit tests for shade display utilities (`shadeDisplay.test.js`) | Frontend unit tests | Mary-Anne Ibeh |
+| Configure GitHub Actions CI pipeline | CI/CD | Chloe Quijano |
+| Verify E2E flows on iOS and Android devices | E2E manual testing | Chloe Quijano |
+| Run performance benchmarks for `/detect` and `/detect-face-mesh` before M.11 | Performance testing | Chloe Quijano |
 
 ---
 
