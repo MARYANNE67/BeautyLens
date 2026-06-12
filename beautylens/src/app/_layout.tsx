@@ -1,15 +1,22 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { Stack } from 'expo-router';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+const PINK = '#C2185B';
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: PINK },
+        headerTintColor: '#fff',
+        headerTitleStyle: { fontWeight: 'bold', fontSize: 18 },
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: '#fff' },
+      }}
+    >
+      <Stack.Screen name="index" options={{ title: 'BeautyLens' }} />
+      <Stack.Screen name="scan" options={{ title: 'Scan Product', headerShown: false }} />
+      <Stack.Screen name="tryon" options={{ title: 'Virtual Try-On' }} />
+      <Stack.Screen name="camera" options={{ title: 'AR Try-On', headerShown: false }} />
+    </Stack>
   );
 }
