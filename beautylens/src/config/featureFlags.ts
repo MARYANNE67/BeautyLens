@@ -9,7 +9,7 @@ import Constants from 'expo-constants';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export const FeatureFlags = {
-  USE_MOCK_DETECTIONS: false,
+  USE_MOCK_DETECTIONS: true,
   ENABLE_FACE_MESH: true,
   ENABLE_DEFAULT_FACE_MESH: true,
   ENABLE_SHADE_MATCHING: false,   // off until feat/shade-matching branch

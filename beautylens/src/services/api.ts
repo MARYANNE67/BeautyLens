@@ -16,6 +16,7 @@ export const getHealthStatus = async (baseUrl: string): Promise<HealthStatus> =>
   }
 };
 
+
 export const detectProducts = async (
   baseUrl: string,
   imageUri: string,
@@ -23,11 +24,21 @@ export const detectProducts = async (
 ): Promise<DetectionResult> => {
   try {
     const formData = new FormData();
-    formData.append('image', {
-      uri: imageUri,
-      type: 'image/jpeg',
-      name: 'photo.jpg',
-    } as any);
+
+    // Web vs mobile handling
+    if (imageUri.startsWith('data:') || imageUri.startsWith('blob:')) {
+      // Web — fetch the blob and append it
+      const res = await fetch(imageUri);
+      const blob = await res.blob();
+      formData.append('image', blob, 'photo.jpg');
+    } else {
+      // Mobile — React Native URI format
+      formData.append('image', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: 'photo.jpg',
+      } as any);
+    }
 
     console.log(`[API] Sending detection request to ${baseUrl}/detect`);
 
@@ -40,8 +51,10 @@ export const detectProducts = async (
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      const errorMessage =
-        (errorData as any).detail || `HTTP error! status: ${response.status}`;
+      const detail = (errorData as any).detail;
+      const errorMessage = Array.isArray(detail)
+        ? detail.map((d: any) => d.msg).join(', ')
+        : detail || `HTTP error! status: ${response.status}`;
       throw new Error(errorMessage);
     }
 
@@ -53,6 +66,45 @@ export const detectProducts = async (
     throw error;
   }
 };
+
+
+// export const detectProducts = async (
+//   baseUrl: string,
+//   imageUri: string,
+//   confidence = 0.25
+// ): Promise<DetectionResult> => {
+//   try {
+//     const formData = new FormData();
+//     formData.append('image', {
+//       uri: imageUri,
+//       type: 'image/jpeg',
+//       name: 'photo.jpg',
+//     } as any);
+
+//     console.log(`[API] Sending detection request to ${baseUrl}/detect`);
+
+//     const response = await fetch(`${baseUrl}/detect?confidence=${confidence}`, {
+//       method: 'POST',
+//       body: formData,
+//     });
+
+//     console.log(`[API] Response status: ${response.status}`);
+
+//     if (!response.ok) {
+//       const errorData = await response.json().catch(() => ({}));
+//       const errorMessage =
+//         (errorData as any).detail || `HTTP error! status: ${response.status}`;
+//       throw new Error(errorMessage);
+//     }
+
+//     const result: DetectionResult = await response.json();
+//     console.log(`[API] Detection successful: ${result.count ?? 0} detections`);
+//     return result;
+//   } catch (error) {
+//     console.error('[API] Detection error:', error);
+//     throw error;
+//   }
+// };
 
 export const detectProductsWithImage = async (
   baseUrl: string,
