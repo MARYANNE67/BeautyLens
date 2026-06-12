@@ -401,9 +401,11 @@ async def detect_face_mesh(
         # Get face mesh detector
         detector = get_face_mesh_detector()
         
+        img_height, img_width = img.shape[:2]
+
         # Detect face mesh
         face_data = detector.detect_face_mesh(img)
-        
+
         if face_data is None:
             print("[API] No face detected in image")
             return {
@@ -422,9 +424,6 @@ async def detect_face_mesh(
         
         # Get facial regions
         facial_regions = detector.get_facial_regions(face_data)
-        
-        # Get image dimensions for coordinate scaling on frontend
-        img_height, img_width = img.shape[:2]
         
         response = {
             "status": "success",
