@@ -65,8 +65,8 @@ jobs:
 
       - name: PyTest
         run: |
-          if find beautylens/src/tests -name "test_*.py" | grep -q .; then
-            pytest beautylens/src/tests/ -q \
+          if find beautylens/tests -name "test_*.py" | grep -q .; then
+            pytest beautylens/tests/ -q \
               --cov=beautylens/src/api \
               --cov-fail-under=80 \
               --cov-report=term-missing
