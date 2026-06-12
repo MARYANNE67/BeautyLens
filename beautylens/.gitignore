@@ -64,3 +64,8 @@ __pycache__/
 
 # ML models
 models/final/*.pt
+
+# Claude Code
+.claude/
+CLAUDE.md
+AGENTS.md
