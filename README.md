@@ -1,4 +1,4 @@
-# SkillCred: AI-Powered Verified Portfolio Platform for Students and New Grads
+# BeautyLens: Makeup Product Detection & Virtual Try-On Platform
 
 ## Team Information
 
@@ -8,6 +8,14 @@
 | Chloe Quijano | cquijano@myseneca.ca | Full Stack Developer / Tech Lead |
 | Mary-Anne Ibeh | mibeh@myseneca.ca | Full Stack Developer / Tech Lead |
 
+**Course:** SED800 Capstone II — 2026
+**Instructors:** Miguel Watler, Marcel Jar
+**Repository:** https://github.com/SED800/SkillCred
+
 ## Project Description
 
-Getting your first job or internship is tough, not because students lack real skills, but because there is no good way to prove them. SkillCred is a web platform that helps students and recent graduates build and share a verified portfolio tied to a specific job they are targeting. Rather than a static PDF resume, users get a permanent, shareable profile page where every skill they list is backed by real evidence including actual projects, code repositories, and work samples. The platform uses artificial intelligence to analyse a student's existing work and resume, compare it to a job description they are interested in, and provide clear feedback on what looks strong, what is missing, and what steps they can take to improve their chances. For recruiters, SkillCred makes it easy to find student candidates who have genuinely demonstrated the skills a role requires, making the path from classroom to career clearer for students and more reliable for the employers looking to hire them.
+BeautyLens is a computer vision and augmented reality application that allows users to automatically identify makeup products using their device camera and virtually try those products on their own face in real time. The project directly addresses a gap in online and in-store beauty retail: consumers cannot easily visualize how a product will look on them before purchasing.
+
+The system is built on a YOLOv8s object-detection model fine-tuned on a 2,715-image, 19-class makeup dataset, a MediaPipe Face Mesh engine returning 468 3D facial landmarks, a FastAPI backend, and a React Native mobile application. The application is being developed to production standards suitable for deployment in a real beauty retail environment.
+
+The codebase originates from the SkillCred project developed in Capstone I. The FastAPI backend, Docker Compose deployment, SQLite persistence layer, and project management artefacts all transfer directly into BeautyLens. Capstone II focuses on completing the AR try-on feature, reaching production-grade model accuracy (mAP@0.5 ≥ 0.70), and delivering a UI and user experience suitable for a live beauty store deployment.
