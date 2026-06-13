@@ -3,11 +3,44 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'beautylens/src/**'
+              - 'beautylens/package*.json'
+              - 'beautylens/tsconfig*.json'
+              - 'beautylens/app.json'
+            backend:
+              - 'beautylens/src/api/**'
+              - 'beautylens/requirements.txt'
+              - 'beautylens/tests/**'
+
   frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     name: Frontend — Type Check, Lint & Test
     runs-on: ubuntu-latest
     defaults:
@@ -39,6 +72,8 @@ jobs:
         run: npx expo export --platform web 2>&1 | grep -v "^warn"
 
   backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     name: Backend — Lint & Test
     runs-on: ubuntu-latest
 
