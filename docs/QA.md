@@ -5,6 +5,7 @@
 **Team:** Masuma Begum, Chloe Quijano, Mary-Anne Ibeh
 **Repository:** `https://github.com/SED800/SkillCred`
 **Last Updated:** June 2026
+**Version:** 2.0 — updated to include shade matching and multi-product look building features
 
 ---
 
@@ -114,7 +115,7 @@ The `/set-confidence` endpoint logic is also unit tested:
 | `POST /set-confidence { "threshold": -0.1 }` | Returns 400 — out of range |
 | `POST /set-confidence {}` | Returns 400 — missing field |
 
-Shade matching unit tests (`tests/test_shade_matching.py`):
+**New — Shade Matching unit tests (`tests/test_shade_matching.py`):**
 
 | Function | Test Cases |
 |---|---|
@@ -157,7 +158,7 @@ The following functions in `src/utils/meshOverlays.js` are unit tested:
 | `renderClassBasedMesh()` | `"eye liner"` maps to eye mesh renderer |
 | `renderClassBasedMesh()` | Returns `null` when `landmarks` array is empty |
 
-Multi-product look state unit tests (`src/__tests__/lookBuilder.test.js`):
+**New — Multi-product look state unit tests (`src/__tests__/lookBuilder.test.js`):**
 
 | Function | Test Cases |
 |---|---|
@@ -171,7 +172,7 @@ Multi-product look state unit tests (`src/__tests__/lookBuilder.test.js`):
 | `hasProductInLook(className)` | Returns `true` when class is in current look, `false` otherwise |
 | `getProductCountInLook()` | Returns correct count after adding and removing products |
 
-Shade matching display unit tests (`src/__tests__/shadeDisplay.test.js`):
+**New — Shade matching display unit tests (`src/__tests__/shadeDisplay.test.js`):**
 
 | Function | Test Cases |
 |---|---|
@@ -218,7 +219,7 @@ Integration tests verify that system components work correctly together. These t
 | After a successful `/detect` call | A session log record is written to SQLite with `class_name`, `confidence`, and `timestamp` |
 | Multiple sequential `/detect` calls | One record per call in the database, no duplicates |
 
-#### Shade Matching Integration
+#### New — Shade Matching Integration
 
 | Test | Input | Expected Result |
 |---|---|---|
@@ -227,7 +228,7 @@ Integration tests verify that system components work correctly together. These t
 | Full shade match pipeline: detect product → extract product colour → extract skin tone → compare | Real product + real face | `compare_skin_to_shade()` returns one of `"good_match"`, `"try_lighter"`, `"try_darker"` |
 | Shade matching for non-colour class (e.g., `"brush"`) | Any image | `get_shade_recommendation()` returns `None` — no recommendation generated |
 
-#### Multi-Product Look Building Integration
+#### New — Multi-Product Look Building Integration
 
 | Test | Steps | Expected Result |
 |---|---|---|
@@ -287,7 +288,113 @@ Performance testing verifies that BeautyLens meets its latency targets for a liv
 
 ---
 
-### 6. Security Testing
+### 6. Negative Testing
+
+Negative testing verifies that the system fails gracefully and returns meaningful errors when given invalid, unexpected, or malicious inputs. Every endpoint and utility function must handle bad input without crashing.
+
+#### Backend — API Negative Tests (`tests/test_negative.py`)
+
+**`/detect` endpoint — invalid inputs:**
+
+| Test | Input | Expected Behaviour |
+|---|---|---|
+| Empty file upload | 0-byte JPEG | HTTP 400 — `"Empty image file received"` |
+| Non-image file | `.txt` file content | HTTP 400 — `"Invalid image format"` |
+| Executable file | `.exe` file | HTTP 400 — no crash, no execution |
+| Corrupted image | Random bytes with `.jpg` extension | HTTP 400 — `"Could not decode image"` |
+| Missing image field | Form with no `image` key | HTTP 422 — FastAPI validation error |
+| Oversized image | 50MB file | HTTP 413 — request rejected by size limit |
+| Wrong content type | JSON body instead of form data | HTTP 422 — FastAPI validation error |
+
+**`/detect-face-mesh` endpoint — invalid inputs:**
+
+| Test | Input | Expected Behaviour |
+|---|---|---|
+| No face in image | Product image with no person | HTTP 200, `face_detected: false` — no crash |
+| Non-image file | `.pdf` upload | HTTP 400 |
+| Empty file | 0-byte upload | HTTP 400 |
+| Very small image | 10×10 pixel image | HTTP 200, `face_detected: false` — too small to detect |
+| Completely dark image | All-black image | HTTP 200, `face_detected: false` — no crash |
+
+**`/set-confidence` endpoint — boundary and invalid values:**
+
+| Test | Input | Expected Behaviour |
+|---|---|---|
+| Above maximum | `{ "threshold": 1.1 }` | HTTP 400 — out of range |
+| Below minimum | `{ "threshold": -0.5 }` | HTTP 400 — out of range |
+| String instead of number | `{ "threshold": "high" }` | HTTP 422 — type validation error |
+| Null value | `{ "threshold": null }` | HTTP 422 — type validation error |
+| Empty body | `{}` | HTTP 400 — missing required field |
+| Exactly 0.0 | `{ "threshold": 0.0 }` | HTTP 200 — boundary accepted |
+| Exactly 1.0 | `{ "threshold": 1.0 }` | HTTP 200 — boundary accepted |
+
+**`/load-model` endpoint — invalid paths:**
+
+| Test | Input | Expected Behaviour |
+|---|---|---|
+| Non-existent path | `"/fake/path/model.pt"` | HTTP 400 — `"Model file not found"` |
+| Directory instead of file | `"/tmp/"` | HTTP 400 — not a valid model |
+| Missing field | `{}` | HTTP 400 |
+
+#### Frontend — Negative Tests (Jest)
+
+**`normalizeClassName()` — invalid inputs:**
+
+| Test | Input | Expected Behaviour |
+|---|---|---|
+| Null | `null` | Returns `null` — no exception thrown |
+| Undefined | `undefined` | Returns `null` — no exception thrown |
+| Empty string | `""` | Returns `null` |
+| Whitespace only | `"   "` | Returns `null` |
+| Unknown class | `"toothbrush"` | Returns `null` |
+
+**`addProductToLook()` — invalid inputs:**
+
+| Test | Input | Expected Behaviour |
+|---|---|---|
+| Null product | `addProductToLook(null, config)` | Returns current look unchanged — no crash |
+| Duplicate class | Add `"lip stick"` twice | Second entry replaces first — no duplicates |
+| Empty overlay config | `addProductToLook(product, null)` | Returns current look unchanged |
+
+**`removeProductFromLook()` — invalid inputs:**
+
+| Test | Input | Expected Behaviour |
+|---|---|---|
+| Non-existent class | `removeProductFromLook("toothbrush")` | Returns look unchanged — no crash |
+| Null class name | `removeProductFromLook(null)` | Returns look unchanged — no crash |
+| Empty look | Remove from empty state | Returns empty array — no crash |
+
+**`compare_skin_to_shade()` — invalid inputs:**
+
+| Test | Input | Expected Behaviour |
+|---|---|---|
+| Null skin LAB | `compare_skin_to_shade(None, product_lab)` | Returns `None` — no crash |
+| Null product LAB | `compare_skin_to_shade(skin_lab, None)` | Returns `None` — no crash |
+| Both null | `compare_skin_to_shade(None, None)` | Returns `None` — no crash |
+
+**`getOverlayColourFromProduct()` — invalid inputs:**
+
+| Test | Input | Expected Behaviour |
+|---|---|---|
+| Null bbox | `getOverlayColourFromProduct(null, "#C2185B")` | Returns fallback colour `"#C2185B"` |
+| Zero-size bbox | bbox with `width: 0, height: 0` | Returns fallback colour — no division by zero |
+
+#### Negative Smoke Tests (Manual)
+
+These negative scenarios must be verified manually before each release:
+
+- [ ] Upload a selfie (face only, no product) to `/detect` — app shows "No products detected", does not crash
+- [ ] Hold a non-makeup object (book, water bottle) at the camera — no bounding box shown
+- [ ] Kill the API server while scan screen is running — app shows "API Offline", does not crash
+- [ ] Tap "Try On" with no internet connection — app shows friendly error, does not crash
+- [ ] Rapid-tap the scan button 10 times quickly — no duplicate requests, no race condition crash
+- [ ] Rotate phone mid-detection — bounding boxes reposition correctly, no layout crash
+- [ ] Tap "Clear Look" when no look has been built — button is no-op, no crash
+- [ ] Navigate away from face camera mid-detection — camera releases cleanly, no memory leak warning
+
+---
+
+### 7. Security Testing
 
 BeautyLens processes live camera frames containing facial data. The following security concerns are tested:
 
