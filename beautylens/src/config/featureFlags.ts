@@ -11,7 +11,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 export const FeatureFlags = {
   USE_MOCK_DETECTIONS: false,
   ENABLE_FACE_MESH: true,
-  ENABLE_DEFAULT_FACE_MESH: true,
+  ENABLE_DEFAULT_FACE_MESH: false,
   ENABLE_SHADE_MATCHING: false,   // off until feat/shade-matching branch
   ENABLE_LOOK_BUILDER: false,     // off until feat/look-builder branch
 } as const;
