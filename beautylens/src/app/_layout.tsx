@@ -13,10 +13,11 @@ export default function RootLayout() {
         contentStyle: { backgroundColor: '#fff' },
       }}
     >
-      <Stack.Screen name="index" options={{ title: 'BeautyLens' }} />
-      <Stack.Screen name="scan" options={{ title: 'Scan Product', headerShown: false }} />
-      <Stack.Screen name="tryon" options={{ title: 'Virtual Try-On' }} />
-      <Stack.Screen name="camera" options={{ title: 'AR Try-On', headerShown: false }} />
+      <Stack.Screen name="(tabs)"   options={{ headerShown: false }} />
+      <Stack.Screen name="account"  options={{ headerShown: false }} />
+      <Stack.Screen name="scan"     options={{ headerShown: false }} />
+      <Stack.Screen name="tryon"    options={{ headerShown: false }} />
+      <Stack.Screen name="camera"   options={{ headerShown: false }} />
     </Stack>
   );
 }
