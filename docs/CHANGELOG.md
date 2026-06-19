@@ -4,6 +4,33 @@ All notable changes to BeautyLens will be documented in this file.
 
 ---
 
+## 2026-06-19
+
+### Added
+
+- Root-level `development.md` with setup and run commands for the FastAPI backend and Expo frontend
+- Multi-product virtual try-on flow from the scan screen
+  - Detected try-on product types are deduplicated into selectable chips
+  - Selected product types are passed through `/tryon` into the AR camera
+  - AR camera renders all selected product overlays together
+- Custom scan-screen Back button because the native header is hidden on the camera route
+
+### Changed
+
+- Improved AR lip overlay accuracy
+  - Backend now returns `outer_lip` and `inner_lip` facial regions
+  - Lipstick overlay renders upper and lower lips as separate closed surfaces
+  - SVG overlay renderer supports compound paths for mouth cutouts
+- Improved eyeshadow placement
+  - Eyeshadow regions now use tighter eyelid/crease landmarks instead of eyebrow-spanning regions
+  - Eyeshadow overlay opacity and stroke opacity were softened for tutorial-style placement
+- Reduced face overlay loading/blinking
+  - Face mesh polling interval reduced from 1000ms to 500ms
+  - Face capture quality reduced for smaller backend requests
+  - Last successful mesh remains visible during transient capture/network errors
+
+---
+
 ## 2026-06-12
 
 ### Added
@@ -99,5 +126,4 @@ BeautyLens (SED800 Capstone II) builds on the SkillCred foundation from Capstone
 
 - Pivoted Capstone I project scope to focus on students and new graduates as the primary audience
 - Updated project plan to version 2.0 reflecting new audience and revised effort estimates totalling 545 hours
-
 

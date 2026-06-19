@@ -126,16 +126,17 @@ class FaceMeshDetector:
         # MediaPipe Face Mesh landmark indices (468 total landmarks)
         # Using correct MediaPipe Face Mesh landmark indices for proper outlines
         
-        # Outer lips (ordered to form a closed loop going clockwise around the lips)
-        # MediaPipe outer lip landmarks - must include both upper and lower lips
-        # Path: Start at left corner -> Upper lip (left to right) -> Right corner -> Lower lip (right to left) -> Back to start
-        # Upper lip outer: 61, 84, 17, 314, 405, 320, 307, 375, 321, 308
-        # Lower lip outer: 324, 318, 402, 317, 14, 87, 178, 88, 95, 78
-        # Complete path: 61 -> 84 -> 17 -> 314 -> 405 -> 320 -> 307 -> 375 -> 321 -> 308 -> 324 -> 318 -> 402 -> 317 -> 14 -> 87 -> 178 -> 88 -> 95 -> 78 -> 61
-        outer_lip_indices = [61, 84, 17, 314, 405, 320, 307, 375, 321, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78]
-        
-        # Inner lips (for more precise lip area)
-        inner_lip_indices = [78, 81, 80, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95]
+        # Outer and inner mouth loops from MediaPipe's canonical lip contours.
+        # These are complete closed-loop paths around the mouth and mouth opening.
+        outer_lip_indices = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185]
+        inner_lip_indices = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191]
+
+        # Closed filled lip surfaces. Each polygon follows the outside contour
+        # from left mouth corner to right mouth corner, then returns along the
+        # inner mouth contour. This avoids filling teeth while still drawing
+        # both upper and lower lips independently.
+        upper_lip_indices = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78]
+        lower_lip_indices = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78]
         
         # Left eye (ordered for proper outline - clockwise)
         left_eye_indices = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
@@ -143,15 +144,11 @@ class FaceMeshDetector:
         # Right eye (ordered for proper outline - clockwise)
         right_eye_indices = [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466]
         
-        # Eyeshadow area (above eyes - eyelid/eyebrow region)
-        # Left eyeshadow: area above left eye - includes eyebrow and upper eyelid
-        # Key landmarks: eyebrow (70, 63, 105, 66, 107, 55, 65, 52, 53, 46) and upper eyelid area
-        # Form a region from eyebrow down to just above the eye
-        left_eyeshadow_indices = [70, 63, 105, 66, 107, 55, 65, 52, 53, 46, 124, 35, 31, 228, 229, 230, 231, 232, 233, 244, 245, 122, 6, 197, 196, 3, 51, 48, 115, 131, 134, 102, 49, 220, 305, 281, 363, 360]
-        
-        # Right eyeshadow: area above right eye - includes eyebrow and upper eyelid
-        # Key landmarks: eyebrow (300, 293, 334, 296, 336, 285, 295, 282, 283, 276) and upper eyelid area
-        right_eyeshadow_indices = [300, 293, 334, 296, 336, 285, 295, 282, 283, 276, 353, 265, 261, 447, 448, 449, 450, 451, 452, 453, 464, 351, 326, 425, 427, 411, 280, 278, 344, 340, 346, 347, 330, 279, 358, 360, 440, 344]
+        # Eyeshadow tutorial zones: compact eyelid/crease bands, intentionally
+        # below the eyebrow landmarks. Each polygon follows the crease above
+        # the eye, then returns along the upper eyelid.
+        left_eyeshadow_indices = [130, 247, 30, 29, 27, 28, 56, 190, 243, 133, 173, 157, 158, 159, 160, 161, 246, 33]
+        right_eyeshadow_indices = [359, 467, 260, 259, 257, 258, 286, 414, 463, 362, 398, 384, 385, 386, 387, 388, 466, 263]
         
         # Face oval/contour (ordered for proper outline)
         face_oval_indices = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109]
@@ -171,11 +168,8 @@ class FaceMeshDetector:
         outer_lip_landmarks = get_landmarks(outer_lip_indices)
         inner_lip_landmarks = get_landmarks(inner_lip_indices)
         
-        # Split outer lip into upper and lower for fallback
-        # Upper lip: first 10 points (61 to 308)
-        # Lower lip: last 10 points (324 to 78), but reverse for proper path
-        upper_lip_landmarks = get_landmarks(outer_lip_indices[:10])
-        lower_lip_landmarks = get_landmarks(outer_lip_indices[10:])
+        upper_lip_landmarks = get_landmarks(upper_lip_indices)
+        lower_lip_landmarks = get_landmarks(lower_lip_indices)
         
         return {
             'outer_lip': outer_lip_landmarks,  # Complete lip outline in order
@@ -201,4 +195,3 @@ def get_face_mesh_detector() -> FaceMeshDetector:
     if face_mesh_detector is None:
         face_mesh_detector = FaceMeshDetector()
     return face_mesh_detector
-
