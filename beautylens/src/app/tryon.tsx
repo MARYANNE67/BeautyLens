@@ -1,8 +1,3 @@
-/**
- * Virtual Try-On Screen
- * Intermediate screen displaying product info before entering AR face camera
- */
-
 import React from 'react';
 import {
   StyleSheet,
@@ -13,135 +8,325 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
-const PINK = '#C2185B';
-const PINK_LIGHT = '#FCE4EC';
-const PINK_DARK = '#880E4F';
+const PINK       = '#C2185B';
+const PINK_LIGHT = '#FDE8F0';
+const HERO_BG    = '#1C0814';
+const BG         = '#F6F1F4';
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const PRODUCT_CONFIG: Record<string, { swatch: string; icon: IoniconName; category: string }> = {
+  Foundation:  { swatch: '#C8956C', icon: 'water-outline',          category: 'Face' },
+  Powder:      { swatch: '#E8A598', icon: 'cloud-outline',          category: 'Face' },
+  Lipstick:    { swatch: '#C62828', icon: 'heart-outline',          category: 'Lips' },
+  Blush:       { swatch: '#E88FAE', icon: 'flower-outline',         category: 'Cheeks' },
+  Concealer:   { swatch: '#D4A574', icon: 'water-outline',          category: 'Face' },
+  Mascara:     { swatch: '#37474F', icon: 'eye-outline',            category: 'Eyes' },
+  Eyeshadow:   { swatch: '#7B1FA2', icon: 'color-palette-outline',  category: 'Eyes' },
+  Bronzer:     { swatch: '#A0522D', icon: 'sunny-outline',          category: 'Face' },
+  Highlighter: { swatch: '#F9C74F', icon: 'star-outline',           category: 'Face' },
+};
+
+const FALLBACK = { swatch: PINK, icon: 'color-palette-outline' as IoniconName, category: 'Makeup' };
+
+const EXPECT_ITEMS: { icon: IoniconName; text: string }[] = [
+  { icon: 'videocam-outline',     text: 'Real-time AR overlay on your face' },
+  { icon: 'color-palette-outline', text: 'See how the shade looks on your skin' },
+  { icon: 'sunny-outline',        text: 'Works in different lighting conditions' },
+  { icon: 'camera-outline',       text: 'Capture and save your favourite looks' },
+];
 
 export default function VirtualTryOnScreen() {
   const router = useRouter();
-  const { productType, productName, productImageUrl } = useLocalSearchParams<{
-    productType: string;
-    productName: string;
+  const { productType, productName, brand, shade } = useLocalSearchParams<{
+    productType?: string;
+    productName?: string;
     productImageUrl?: string;
+    brand?: string;
+    shade?: string;
   }>();
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+  const label = productName ?? productType ?? 'Product';
+  const key   = label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
+  const cfg   = PRODUCT_CONFIG[key] ?? FALLBACK;
 
-        {/* Product header */}
-        <View style={styles.productCard}>
-          <View style={styles.productIconContainer}>
-            <Text style={styles.productIcon}>💄</Text>
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+
+      {/* ── Custom header ── */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={26} color="#1A1A1A" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Virtual Try-On</Text>
+        <View style={{ width: 42 }} />
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+
+        {/* ── Hero card ── */}
+        <View style={styles.heroCard}>
+          <View style={[styles.dec, { width: 220, height: 220, top: -80, right: -80, backgroundColor: 'rgba(194,24,91,0.14)' }]} />
+          <View style={[styles.dec, { width: 130, height: 130, bottom: -40, left: -30, backgroundColor: 'rgba(233,30,140,0.10)' }]} />
+
+          {/* AR face mark */}
+          <View style={styles.arWrap}>
+            <View style={[styles.corner, { top: 0,    left: 0,  borderTopWidth: 3,    borderLeftWidth: 3   }]} />
+            <View style={[styles.corner, { top: 0,    right: 0, borderTopWidth: 3,    borderRightWidth: 3  }]} />
+            <View style={[styles.corner, { bottom: 0, left: 0,  borderBottomWidth: 3, borderLeftWidth: 3   }]} />
+            <View style={[styles.corner, { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3  }]} />
+            <View style={styles.arOval} />
+            <View style={[styles.arDot, { top: 18, left: 20 }]} />
+            <View style={[styles.arDot, { top: 18, right: 20 }]} />
+            <View style={[styles.arDot, { bottom: 20, alignSelf: 'center' }]} />
+          </View>
+
+          <Text style={styles.heroTitle}>See It On You</Text>
+          <Text style={styles.heroSub}>
+            Your camera will overlay the product on your face in real time
+          </Text>
+        </View>
+
+        {/* ── Product pill ── */}
+        <View style={styles.productPill}>
+          <View style={[styles.productSwatch, { backgroundColor: cfg.swatch }]}>
+            <Ionicons name={cfg.icon} size={18} color="#fff" />
           </View>
           <View style={styles.productInfo}>
-            <Text style={styles.productName}>
-              {productName ?? productType ?? 'Product'}
+            <Text style={styles.productName}>{label}</Text>
+            <Text style={styles.productCategory}>
+              {[brand, shade].filter(Boolean).join(' · ') || cfg.category}
             </Text>
-            <Text style={styles.productType}>
-              {productType ? productType.charAt(0).toUpperCase() + productType.slice(1) : ''} · Face product
-            </Text>
+          </View>
+          <View style={[styles.categoryBadge, { backgroundColor: cfg.swatch + '22' }]}>
+            <Text style={[styles.categoryBadgeText, { color: cfg.swatch }]}>{cfg.category}</Text>
           </View>
         </View>
 
-        {/* Main CTA area */}
-        <View style={styles.ctaContainer}>
-          <Text style={styles.ctaTitle}>Virtual Try-On</Text>
-          <Text style={styles.ctaSubtitle}>
-            Experience how this product looks on you
-          </Text>
-          <Text style={styles.ctaDescription}>
-            Use your front-facing camera to see how this product looks on your
-            face in real-time.
-          </Text>
-        </View>
-
-        {/* Start button */}
+        {/* ── Start button ── */}
         <TouchableOpacity
-          style={styles.startButton}
-          onPress={() =>
-            router.push({
-              pathname: '/camera',
-              params: { productType, productName, productImageUrl: productImageUrl ?? '' },
-            })
-          }
+          style={[styles.startBtn, { backgroundColor: cfg.swatch }]}
+          onPress={() => router.push({ pathname: '/camera', params: { productType, productName } })}
           activeOpacity={0.85}
         >
-          <Text style={styles.startButtonText}>Start Virtual Try-On</Text>
+          <Ionicons name="camera" size={20} color="#fff" />
+          <Text style={styles.startBtnText}>Start Try-On</Text>
         </TouchableOpacity>
 
-        {/* What to expect */}
-        <View style={styles.infoSection}>
-          <Text style={styles.infoTitle}>What to Expect</Text>
-          {[
-            'Real-time AR overlay of the product',
-            'See how it looks in different lighting',
-            'Try different shades and colors',
-            'Save your favourite looks',
-          ].map((item) => (
-            <View key={item} style={styles.infoRow}>
-              <View style={styles.checkDot} />
-              <Text style={styles.infoText}>{item}</Text>
+        {/* ── What to expect ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>What to Expect</Text>
+          {EXPECT_ITEMS.map((item) => (
+            <View key={item.text} style={styles.expectRow}>
+              <View style={styles.expectIcon}>
+                <Ionicons name={item.icon} size={18} color={PINK} />
+              </View>
+              <Text style={styles.expectText}>{item.text}</Text>
             </View>
           ))}
         </View>
+
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  scrollView: { flex: 1 },
-  content: { padding: 20, paddingBottom: 40 },
-  productCard: {
+  safe: { flex: 1, backgroundColor: BG },
+
+  /* Header */
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: PINK_LIGHT,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 24,
-    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: BG,
   },
-  productIconContainer: {
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+
+  scroll: { paddingBottom: 40 },
+
+  /* Hero */
+  heroCard: {
+    margin: 16,
+    backgroundColor: HERO_BG,
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  dec: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  arWrap: {
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  corner: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 2,
+  },
+  arOval: {
+    width: 38,
+    height: 48,
+    borderRadius: 19,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  arDot: {
+    position: 'absolute',
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+  },
+  heroTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  heroSub: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.55)',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  /* Product pill */
+  productPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    borderRadius: 16,
+    padding: 14,
+    gap: 12,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  productSwatch: {
     width: 44,
     height: 44,
-    borderRadius: 10,
-    backgroundColor: '#fff',
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  productIcon: { fontSize: 24 },
   productInfo: { flex: 1 },
-  productName: { fontSize: 15, fontWeight: '600', color: PINK_DARK },
-  productType: { fontSize: 12, color: PINK, marginTop: 2 },
-  ctaContainer: { alignItems: 'center', paddingVertical: 20, marginBottom: 8 },
-  ctaTitle: { fontSize: 26, fontWeight: 'bold', color: '#111', marginBottom: 6 },
-  ctaSubtitle: { fontSize: 14, color: '#888', marginBottom: 10 },
-  ctaDescription: {
-    fontSize: 14,
-    color: '#555',
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 20,
+  productName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 2,
   },
-  startButton: {
-    backgroundColor: PINK,
-    paddingVertical: 18,
-    borderRadius: 30,
+  productCategory: {
+    fontSize: 12,
+    color: '#A0A0A0',
+  },
+  categoryBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  categoryBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  /* Start button */
+  startBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    paddingVertical: 20,
+    borderRadius: 16,
     marginBottom: 24,
     shadowColor: PINK,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  startButtonText: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
-  infoSection: { backgroundColor: '#f8f8f8', padding: 18, borderRadius: 14 },
-  infoTitle: { fontSize: 16, fontWeight: '600', color: '#111', marginBottom: 12 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 10 },
-  checkDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: PINK },
-  infoText: { fontSize: 13, color: '#555', flex: 1 },
+  startBtnText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#fff',
+  },
+
+  /* What to expect */
+  section: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 16,
+  },
+  expectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 14,
+  },
+  expectIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: PINK_LIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  expectText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#555',
+    lineHeight: 20,
+  },
 });
