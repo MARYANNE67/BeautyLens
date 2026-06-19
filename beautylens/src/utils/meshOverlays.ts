@@ -146,34 +146,36 @@ export const renderDefaultMesh = (
 ): MeshPoint[] => {
   const { viewWidth, viewHeight, scaleX, scaleY, offsetX, offsetY, mirrorX } = scalingParams;
 
-  return landmarks
-    .map((landmark, index) => {
-      let scaledX = landmark.x * scaleX + offsetX;
-      const scaledY = landmark.y * scaleY + offsetY;
+  const points: MeshPoint[] = [];
 
-      if (mirrorX) {
-        scaledX = viewWidth - scaledX;
-      }
+  landmarks.forEach((landmark, index) => {
+    let scaledX = landmark.x * scaleX + offsetX;
+    const scaledY = landmark.y * scaleY + offsetY;
 
-      const margin = 10;
-      if (
-        scaledX < -margin ||
-        scaledX > viewWidth + margin ||
-        scaledY < -margin ||
-        scaledY > viewHeight + margin
-      ) {
-        return null;
-      }
+    if (mirrorX) {
+      scaledX = viewWidth - scaledX;
+    }
 
-      return {
-        key: `landmark-${index}`,
-        x: scaledX - 1.5,
-        y: scaledY - 1.5,
-        type: 'landmark' as const,
-        size: 3,
-      };
-    })
-    .filter((p): p is MeshPoint => p !== null);
+    const margin = 10;
+    if (
+      scaledX < -margin ||
+      scaledX > viewWidth + margin ||
+      scaledY < -margin ||
+      scaledY > viewHeight + margin
+    ) {
+      return;
+    }
+
+    points.push({
+      key: `landmark-${index}`,
+      x: scaledX - 1.5,
+      y: scaledY - 1.5,
+      type: 'landmark',
+      size: 3,
+    });
+  });
+
+  return points;
 };
 
 /**
