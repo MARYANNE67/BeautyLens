@@ -29,6 +29,12 @@ const API_BASE_URL = __DEV__
 const DETECTION_CONFIDENCE_THRESHOLD = AppConfig.DETECTION_CONFIDENCE_THRESHOLD;
 const DETECTION_INTERVAL = AppConfig.DETECTION_INTERVAL;
 const USE_MOCK_DETECTIONS = FeatureFlags.USE_MOCK_DETECTIONS;
+const NO_VIRTUAL_TRYON = ['brush', 'eyelash curler', 'beauty blender'];
+
+const getTryOnType = (product: Detection) => normalizeClassName(product.label) ?? product.label;
+
+const supportsVirtualTryOn = (productType: string) =>
+  !NO_VIRTUAL_TRYON.includes(productType.toLowerCase());
 
 const transformDetection = (
   apiDetection: ApiDetection,
@@ -75,6 +81,7 @@ export default function ScanProductScreen() {
   const [cameraType, setCameraType] = useState<'back' | 'front'>('back');
   const [detections, setDetections] = useState<Detection[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Detection | null>(null);
+  const [selectedLookTypes, setSelectedLookTypes] = useState<string[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
   const [apiStatus, setApiStatus] = useState<ApiStatus>(
     USE_MOCK_DETECTIONS ? 'ready' : 'unknown'
@@ -86,6 +93,14 @@ export default function ScanProductScreen() {
   const cameraViewSizeRef = useRef({ width: 0, height: 0 });
   const apiStatusRef = useRef<ApiStatus>(apiStatus);
   const isDetectingRef = useRef(false);
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
 
   const captureAndDetect = async () => {
     if (!USE_MOCK_DETECTIONS && (!cameraRef.current || isDetecting)) return;
@@ -122,14 +137,31 @@ export default function ScanProductScreen() {
           setLastDetectionCount(transformed.length);
           setErrorMessage(null);
 
-          if (transformed.length > 0 && !selectedProduct) {
+          const supportedTypes: string[] = Array.from(
+            new Set(
+              transformed
+                .map(getTryOnType)
+                .filter((type: string) => supportsVirtualTryOn(type))
+            )
+          );
+
+          setSelectedLookTypes((current) => {
+            const retained = current.filter((type) => supportedTypes.includes(type));
+            if (retained.length > 0) return retained;
+            return supportedTypes;
+          });
+
+          if (transformed.length > 0 && supportedTypes.length <= 1 && !selectedProduct) {
             const highest = transformed.reduce((prev: Detection, curr: Detection) =>
               prev.confidence > curr.confidence ? prev : curr
             );
             setSelectedProduct(highest);
+          } else if (supportedTypes.length > 1) {
+            setSelectedProduct(null);
           }
         } else {
           setDetections([]);
+          setSelectedLookTypes([]);
           setLastDetectionCount(0);
           setErrorMessage('No products detected. Try pointing at a makeup product.');
         }
@@ -137,6 +169,7 @@ export default function ScanProductScreen() {
     } catch (error) {
       setErrorMessage(`Error: ${(error as Error).message ?? 'Unknown error'}`);
       setDetections([]);
+      setSelectedLookTypes([]);
     } finally {
       setIsDetecting(false);
       isDetectingRef.current = false;
@@ -182,6 +215,7 @@ export default function ScanProductScreen() {
         }
         setDetections([]);
         setSelectedProduct(null);
+        setSelectedLookTypes([]);
       };
     }, [])
   );
@@ -195,13 +229,52 @@ export default function ScanProductScreen() {
   }, [isDetecting]);
 
   const handleTryVirtualLook = (product: Detection) => {
-    const normalized = normalizeClassName(product.label) ?? product.label;
+    const normalized = getTryOnType(product);
     router.push({
       pathname: '/tryon',
       params: {
         productType: normalized,
         productName: product.productName ?? product.displayName ?? product.label,
         productImageUrl: product.productImageUrl ?? '',
+      },
+    });
+  };
+
+  const uniqueTryOnProducts = detections.reduce<Detection[]>((products, detection) => {
+    const type = getTryOnType(detection);
+    if (!supportsVirtualTryOn(type)) return products;
+    if (products.some((product) => getTryOnType(product) === type)) return products;
+    return [...products, detection];
+  }, []);
+
+  const toggleLookType = (productType: string) => {
+    setSelectedLookTypes((current) =>
+      current.includes(productType)
+        ? current.filter((type) => type !== productType)
+        : [...current, productType]
+    );
+  };
+
+  const handleTrySelectedLook = () => {
+    const selectedProducts = uniqueTryOnProducts.filter((product) =>
+      selectedLookTypes.includes(getTryOnType(product))
+    );
+
+    if (selectedProducts.length === 0) return;
+
+    router.push({
+      pathname: '/tryon',
+      params: {
+        productType: getTryOnType(selectedProducts[0]),
+        productName:
+          selectedProducts.length === 1
+            ? selectedProducts[0].productName ?? selectedProducts[0].displayName ?? selectedProducts[0].label
+            : `${selectedProducts.length} product look`,
+        productImageUrl: selectedProducts[0].productImageUrl ?? '',
+        productTypes: JSON.stringify(selectedProducts.map(getTryOnType)),
+        productNames: JSON.stringify(
+          selectedProducts.map((product) => product.productName ?? product.displayName ?? product.label)
+        ),
       },
     });
   };
@@ -269,6 +342,14 @@ export default function ScanProductScreen() {
         }}
       >
         <View style={styles.cameraOverlay}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={handleBack}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+
           {!selectedProduct && (
             <View style={styles.helperTextContainer}>
               <Text style={styles.helperText}>
@@ -328,11 +409,49 @@ export default function ScanProductScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.controlButton}
-          onPress={() => { setDetections([]); setSelectedProduct(null); }}
+          onPress={() => { setDetections([]); setSelectedProduct(null); setSelectedLookTypes([]); }}
         >
           <Text style={styles.controlButtonText}>Clear</Text>
         </TouchableOpacity>
       </View>
+
+      {uniqueTryOnProducts.length > 1 && !selectedProduct && (
+        <View style={styles.lookTray}>
+          <View style={styles.lookHeader}>
+            <Text style={styles.lookTitle}>Try selected look</Text>
+            <Text style={styles.lookCount}>{selectedLookTypes.length}/{uniqueTryOnProducts.length}</Text>
+          </View>
+          <View style={styles.lookChips}>
+            {uniqueTryOnProducts.map((product) => {
+              const productType = getTryOnType(product);
+              const isSelected = selectedLookTypes.includes(productType);
+              return (
+                <TouchableOpacity
+                  key={productType}
+                  style={[styles.lookChip, isSelected && styles.lookChipSelected]}
+                  onPress={() => toggleLookType(productType)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.lookChipText, isSelected && styles.lookChipTextSelected]}>
+                    {isSelected ? '✓ ' : ''}{product.displayName ?? product.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.tryLookButton,
+              selectedLookTypes.length === 0 && styles.tryLookButtonDisabled,
+            ]}
+            onPress={handleTrySelectedLook}
+            disabled={selectedLookTypes.length === 0}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.tryLookButtonText}>Start Look</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {selectedProduct && (
         <ProductCard
@@ -351,6 +470,17 @@ const styles = StyleSheet.create({
   statusText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   camera: { flex: 1 },
   cameraOverlay: { flex: 1, backgroundColor: 'transparent' },
+  backButton: {
+    position: 'absolute',
+    top: 18,
+    left: 16,
+    zIndex: 20,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  backButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   helperTextContainer: { position: 'absolute', bottom: 120, left: 0, right: 0, alignItems: 'center', paddingHorizontal: 20 },
   helperText: { color: '#fff', fontSize: 15, fontWeight: '600', textAlign: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, overflow: 'hidden' },
   boundingBox: { position: 'absolute', backgroundColor: 'transparent' },
@@ -360,6 +490,36 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', padding: 20, backgroundColor: 'rgba(0,0,0,0.7)' },
   controlButton: { padding: 12, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, minWidth: 80, alignItems: 'center' },
   controlButtonText: { color: '#fff', fontWeight: 'bold' },
+  lookTray: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 88,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    borderRadius: 14,
+    padding: 12,
+  },
+  lookHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  lookTitle: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  lookCount: { color: '#FFD700', fontSize: 12, fontWeight: '700' },
+  lookChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  lookChip: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  lookChipSelected: {
+    borderColor: PINK,
+    backgroundColor: 'rgba(194,24,91,0.3)',
+  },
+  lookChipText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  lookChipTextSelected: { color: '#fff' },
+  tryLookButton: { backgroundColor: PINK, borderRadius: 18, paddingVertical: 11, alignItems: 'center' },
+  tryLookButtonDisabled: { opacity: 0.45 },
+  tryLookButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   permissionText: { color: '#fff', textAlign: 'center', marginTop: 40 },
   errorText: { fontSize: 18, color: '#F44336', textAlign: 'center', marginBottom: 10, marginTop: 40 },
   errorSubtext: { fontSize: 14, color: '#666', textAlign: 'center' },

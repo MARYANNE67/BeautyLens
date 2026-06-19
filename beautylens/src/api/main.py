@@ -436,6 +436,8 @@ async def detect_face_mesh(
                 "height": int(img_height)
             },
             "facial_regions": {
+                "outer_lip": facial_regions["outer_lip"],
+                "inner_lip": facial_regions["inner_lip"],
                 "upper_lip": facial_regions["upper_lip"],
                 "lower_lip": facial_regions["lower_lip"],
                 "left_eye": facial_regions["left_eye"],
@@ -466,4 +468,3 @@ async def detect_face_mesh(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-

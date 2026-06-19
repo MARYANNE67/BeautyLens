@@ -40,16 +40,29 @@ const EXPECT_ITEMS: { icon: IoniconName; text: string }[] = [
 
 export default function VirtualTryOnScreen() {
   const router = useRouter();
-  const { productType, productName, brand, shade } = useLocalSearchParams<{
+  const { productType, productName, productImageUrl, brand, shade, productTypes, productNames } = useLocalSearchParams<{
     productType?: string;
     productName?: string;
     productImageUrl?: string;
     brand?: string;
     shade?: string;
+    productTypes?: string;
+    productNames?: string;
   }>();
+  const selectedProductNames = React.useMemo(() => {
+    if (!productNames) return [];
+    try {
+      const parsed = JSON.parse(productNames);
+      return Array.isArray(parsed) ? parsed.filter((name) => typeof name === 'string') : [];
+    } catch {
+      return [];
+    }
+  }, [productNames]);
+  const selectedCount = selectedProductNames.length;
 
-  const label = productName ?? productType ?? 'Product';
-  const key   = label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
+  const label = selectedCount > 1 ? `${selectedCount} product look` : productName ?? productType ?? 'Product';
+  const configLabel = productType ?? productName ?? 'Product';
+  const key   = configLabel.charAt(0).toUpperCase() + configLabel.slice(1).toLowerCase();
   const cfg   = PRODUCT_CONFIG[key] ?? FALLBACK;
 
   return (
@@ -97,7 +110,9 @@ export default function VirtualTryOnScreen() {
           <View style={styles.productInfo}>
             <Text style={styles.productName}>{label}</Text>
             <Text style={styles.productCategory}>
-              {[brand, shade].filter(Boolean).join(' · ') || cfg.category}
+              {selectedCount > 1
+                ? selectedProductNames.join(' · ')
+                : [brand, shade].filter(Boolean).join(' · ') || cfg.category}
             </Text>
           </View>
           <View style={[styles.categoryBadge, { backgroundColor: cfg.swatch + '22' }]}>
@@ -108,7 +123,18 @@ export default function VirtualTryOnScreen() {
         {/* ── Start button ── */}
         <TouchableOpacity
           style={[styles.startBtn, { backgroundColor: cfg.swatch }]}
-          onPress={() => router.push({ pathname: '/camera', params: { productType, productName } })}
+          onPress={() =>
+            router.push({
+              pathname: '/camera',
+              params: {
+                productType,
+                productName,
+                productImageUrl: productImageUrl ?? '',
+                productTypes: productTypes ?? '',
+                productNames: productNames ?? '',
+              },
+            })
+          }
           activeOpacity={0.85}
         >
           <Ionicons name="camera" size={20} color="#fff" />
