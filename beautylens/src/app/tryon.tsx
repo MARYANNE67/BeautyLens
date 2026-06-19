@@ -20,11 +20,23 @@ const PINK_DARK = '#880E4F';
 
 export default function VirtualTryOnScreen() {
   const router = useRouter();
-  const { productType, productName, productImageUrl } = useLocalSearchParams<{
+  const { productType, productName, productImageUrl, productTypes, productNames } = useLocalSearchParams<{
     productType: string;
     productName: string;
     productImageUrl?: string;
+    productTypes?: string;
+    productNames?: string;
   }>();
+  const selectedProductNames = React.useMemo(() => {
+    if (!productNames) return [];
+    try {
+      const parsed = JSON.parse(productNames);
+      return Array.isArray(parsed) ? parsed.filter((name) => typeof name === 'string') : [];
+    } catch {
+      return [];
+    }
+  }, [productNames]);
+  const selectedCount = selectedProductNames.length;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -37,10 +49,12 @@ export default function VirtualTryOnScreen() {
           </View>
           <View style={styles.productInfo}>
             <Text style={styles.productName}>
-              {productName ?? productType ?? 'Product'}
+              {selectedCount > 1 ? `${selectedCount} product look` : productName ?? productType ?? 'Product'}
             </Text>
             <Text style={styles.productType}>
-              {productType ? productType.charAt(0).toUpperCase() + productType.slice(1) : ''} · Face product
+              {selectedCount > 1
+                ? selectedProductNames.join(' · ')
+                : `${productType ? productType.charAt(0).toUpperCase() + productType.slice(1) : ''} · Face product`}
             </Text>
           </View>
         </View>
@@ -63,7 +77,13 @@ export default function VirtualTryOnScreen() {
           onPress={() =>
             router.push({
               pathname: '/camera',
-              params: { productType, productName, productImageUrl: productImageUrl ?? '' },
+              params: {
+                productType,
+                productName,
+                productImageUrl: productImageUrl ?? '',
+                productTypes: productTypes ?? '',
+                productNames: productNames ?? '',
+              },
             })
           }
           activeOpacity={0.85}

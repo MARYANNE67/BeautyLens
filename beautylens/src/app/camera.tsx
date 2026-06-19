@@ -28,22 +28,46 @@ import { AppConfig, FeatureFlags } from '../config/featureFlags';
 import {
   renderDefaultMesh,
   renderClassBasedMesh,
-  getFacialRegions,
   type MeshShape,
   type MeshPolygon,
 } from '../utils/meshOverlays';
 import type { FaceMeshResult, ImageShape } from '../types';
 
 const API_BASE_URL = __DEV__ ? AppConfig.API_BASE_URL_DEV : AppConfig.API_BASE_URL_PROD;
-const FACE_DETECTION_INTERVAL = 1000;
+const FACE_DETECTION_INTERVAL = 500;
+const FACE_CAPTURE_QUALITY = 0.45;
 
 export default function FaceCameraScreen() {
   const router = useRouter();
-  const { productType, productName } = useLocalSearchParams<{
+  const { productType, productName, productTypes, productNames } = useLocalSearchParams<{
     productType: string;
     productName: string;
     productImageUrl?: string;
+    productTypes?: string;
+    productNames?: string;
   }>();
+  const selectedProductTypes = React.useMemo(() => {
+    if (!productTypes) return productType ? [productType] : [];
+    try {
+      const parsed = JSON.parse(productTypes);
+      if (Array.isArray(parsed)) {
+        const values = parsed.filter((type) => typeof type === 'string' && type.length > 0);
+        return values.length > 0 ? Array.from(new Set(values)) : productType ? [productType] : [];
+      }
+    } catch {
+      // Fall back to the single-product param below.
+    }
+    return productType ? [productType] : [];
+  }, [productType, productTypes]);
+  const selectedProductNames = React.useMemo(() => {
+    if (!productNames) return [];
+    try {
+      const parsed = JSON.parse(productNames);
+      return Array.isArray(parsed) ? parsed.filter((name) => typeof name === 'string') : [];
+    } catch {
+      return [];
+    }
+  }, [productNames]);
 
   const [permission, requestPermission] = useCameraPermissions();
   const cameraType = 'front' as const;
@@ -81,6 +105,9 @@ export default function FaceCameraScreen() {
 
   const startFaceDetection = () => {
     if (!FeatureFlags.ENABLE_FACE_MESH) return;
+    if (!isDetectingRef.current && cameraRef.current) {
+      detectFace();
+    }
     detectionIntervalRef.current = setInterval(() => {
       if (!isDetectingRef.current && cameraRef.current) {
         detectFace();
@@ -98,7 +125,7 @@ export default function FaceCameraScreen() {
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.7,
+        quality: FACE_CAPTURE_QUALITY,
         base64: false,
         skipProcessing: true,
       });
@@ -136,7 +163,7 @@ export default function FaceCameraScreen() {
       }
     } catch (error) {
       console.log('[Face Detection] Unexpected error (handled silently):', (error as Error).message);
-      setFaceMeshData(null);
+      // Keep the last successful mesh visible during transient capture/network errors.
       setFaceDetected(false);
     } finally {
       isDetectingRef.current = false;
@@ -207,7 +234,9 @@ export default function FaceCameraScreen() {
     if (FeatureFlags.ENABLE_DEFAULT_FACE_MESH) {
       meshShapes = renderDefaultMesh(landmarks, scalingParams);
     } else {
-      meshShapes = renderClassBasedMesh(productType, meshDataToUse, scalingParams);
+      meshShapes = selectedProductTypes.flatMap((selectedType) =>
+        renderClassBasedMesh(selectedType, meshDataToUse, scalingParams)
+      );
     }
 
     if (!meshShapes || meshShapes.length === 0) {
@@ -223,20 +252,25 @@ export default function FaceCameraScreen() {
           <Svg style={StyleSheet.absoluteFill} width={viewWidth} height={viewHeight}>
             {polygons.map((shape) => {
               if (shape.type === 'polygon' && shape.points && shape.points.length >= 3) {
-                const pathData =
-                  shape.points
+                const buildClosedPath = (points: { x: number; y: number }[]) =>
+                  points
                     .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
                     .join(' ') + ' Z';
+                const pathData = [
+                  buildClosedPath(shape.points),
+                  ...(shape.holes ?? []).map(buildClosedPath),
+                ].join(' ');
 
                 return (
                   <Path
                     key={shape.key}
                     d={pathData}
                     fill={shape.color || '#FF1493'}
+                    fillRule={shape.holes?.length ? 'evenodd' : 'nonzero'}
                     fillOpacity={shape.opacity || 0.4}
                     stroke={shape.color || '#FF1493'}
                     strokeWidth={2}
-                    strokeOpacity={0.6}
+                    strokeOpacity={shape.strokeOpacity ?? 0.6}
                     strokeLinejoin="round"
                     strokeLinecap="round"
                   />
@@ -313,8 +347,15 @@ export default function FaceCameraScreen() {
       <View style={styles.cameraOverlay} pointerEvents="box-none">
         <View style={styles.productInfoOverlay} pointerEvents="none">
           <Text style={styles.productName} numberOfLines={1}>
-            {productName || productType || 'Virtual Try-On'}
+            {selectedProductTypes.length > 1
+              ? `${selectedProductTypes.length} product look`
+              : productName || productType || 'Virtual Try-On'}
           </Text>
+          {selectedProductNames.length > 1 && (
+            <Text style={styles.lookProducts} numberOfLines={1}>
+              {selectedProductNames.join(' · ')}
+            </Text>
+          )}
           <Text style={styles.instructionText}>
             {FeatureFlags.ENABLE_FACE_MESH
               ? faceDetected
@@ -322,7 +363,7 @@ export default function FaceCameraScreen() {
                 : 'Position your face in the frame'
               : 'Face mesh detection disabled'}
           </Text>
-          {isDetecting && FeatureFlags.ENABLE_FACE_MESH && (
+          {isDetecting && FeatureFlags.ENABLE_FACE_MESH && !persistentMeshDataRef.current && (
             <ActivityIndicator size="small" color="#fff" style={{ marginTop: 8 }} />
           )}
         </View>
@@ -386,6 +427,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 20,
     marginBottom: 10,
+  },
+  lookProducts: {
+    color: '#fff',
+    fontSize: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 8,
+    maxWidth: '90%',
   },
   instructionText: {
     color: '#fff',

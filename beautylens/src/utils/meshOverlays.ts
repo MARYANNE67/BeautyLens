@@ -34,8 +34,10 @@ export interface MeshPolygon {
   key: string;
   type: 'polygon';
   points: { x: number; y: number }[];
+  holes?: { x: number; y: number }[][];
   color: string;
   opacity: number;
+  strokeOpacity?: number;
   region: string;
 }
 
@@ -192,6 +194,33 @@ function renderLipstickMesh(
   const shapes: MeshShape[] = [];
 
   if (facialRegions) {
+    const lipSurfaceConfigs: { key: keyof FacialRegions; shapeKey: string; region: string }[] = [
+      { key: 'upper_lip', shapeKey: 'upper-lip-overlay', region: 'upper-lip' },
+      { key: 'lower_lip', shapeKey: 'lower-lip-overlay', region: 'lower-lip' },
+    ];
+
+    for (const { key, shapeKey, region } of lipSurfaceConfigs) {
+      const lipSurface = facialRegions[key];
+      if (lipSurface && lipSurface.length >= 3) {
+        const pathPoints = lipSurface.map((point) =>
+          scalePoint(point, scaleX, scaleY, offsetX, offsetY, mirrorX, viewWidth)
+        );
+
+        shapes.push({
+          key: shapeKey,
+          type: 'polygon',
+          points: pathPoints,
+          color: '#FF1493',
+          opacity: 0.4,
+          region,
+        });
+      }
+    }
+
+    if (shapes.length > 0) {
+      return shapes;
+    }
+
     let lipPoints: Landmark[] = [];
 
     if (facialRegions.outer_lip && facialRegions.outer_lip.length > 0) {
@@ -220,11 +249,18 @@ function renderLipstickMesh(
         const pathPoints = uniquePoints.map((point) =>
           scalePoint(point, scaleX, scaleY, offsetX, offsetY, mirrorX, viewWidth)
         );
+        const innerLipPoints =
+          facialRegions.inner_lip && facialRegions.inner_lip.length >= 3
+            ? facialRegions.inner_lip.map((point) =>
+                scalePoint(point, scaleX, scaleY, offsetX, offsetY, mirrorX, viewWidth)
+              )
+            : undefined;
 
         shapes.push({
           key: 'lip-overlay',
           type: 'polygon',
           points: pathPoints,
+          holes: innerLipPoints ? [innerLipPoints] : undefined,
           color: '#FF1493',
           opacity: 0.4,
           region: 'lips',
@@ -381,7 +417,8 @@ function renderEyeshadowMesh(
       type: 'polygon',
       points: leftEyeshadowPoints,
       color: '#8A2BE2',
-      opacity: 0.4,
+      opacity: 0.28,
+      strokeOpacity: 0.25,
       region: 'left-eyeshadow',
     });
   }
@@ -395,7 +432,8 @@ function renderEyeshadowMesh(
       type: 'polygon',
       points: rightEyeshadowPoints,
       color: '#8A2BE2',
-      opacity: 0.4,
+      opacity: 0.28,
+      strokeOpacity: 0.25,
       region: 'right-eyeshadow',
     });
   }
