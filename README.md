@@ -1,5 +1,11 @@
 # BeautyLens: Makeup Product Detection & Virtual Try-On Platform
 
+## Demo Video
+
+[Watch the BeautyLens demo](docs/demo/beautylens-demo.mp4)
+
+[Watch the high-quality demo video](https://drive.google.com/file/d/1cXBnFsfSndY1Y2Fs73ttZslG67bkK4SA/view?usp=sharing)
+
 ## Team Information
 
 | Name | Email | Role |
