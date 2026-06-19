@@ -55,17 +55,17 @@ export interface Landmark {
 }
 
 export interface FacialRegions {
-  outer_lip?: number[][];
-  upper_lip: number[][];
-  lower_lip: number[][];
-  left_eye: number[][];
-  right_eye: number[][];
-  face_oval: number[][];
-  left_under_eye?: number[][];
-  right_under_eye?: number[][];
-  around_mouth?: number[][];
-  left_eyeshadow?: number[][];
-  right_eyeshadow?: number[][];
+  outer_lip?: number[];
+  upper_lip: number[];
+  lower_lip: number[];
+  left_eye: number[];
+  right_eye: number[];
+  face_oval: number[];
+  left_under_eye?: number[];
+  right_under_eye?: number[];
+  around_mouth?: number[];
+  left_eyeshadow?: number[];
+  right_eyeshadow?: number[];
 }
 
 export interface FaceMeshResult {

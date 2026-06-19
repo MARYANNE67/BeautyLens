@@ -9,9 +9,9 @@ import {
   View,
   Text,
   TouchableOpacity,
-  SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const PINK = '#C2185B';
 const PINK_LIGHT = '#FCE4EC';

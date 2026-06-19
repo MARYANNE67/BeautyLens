@@ -44,14 +44,14 @@ const PRODUCT_OVERLAY_MAP: Record<string, { regions: string[]; color: string; op
 
 function landmarksToPoints(
   landmarks: { x: number; y: number }[],
-  indices: number[][],
+  indices: number[],
   scaleX: number,
   scaleY: number,
   mirrorX: boolean,
   viewWidth: number
 ): string {
   return indices
-    .map(([i]) => {
+    .map((i) => {
       const lm = landmarks[i];
       if (!lm) return '';
       const x = mirrorX ? viewWidth - lm.x * scaleX : lm.x * scaleX;
