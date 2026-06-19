@@ -28,6 +28,7 @@ const API_BASE_URL = __DEV__
 
 const DETECTION_CONFIDENCE_THRESHOLD = AppConfig.DETECTION_CONFIDENCE_THRESHOLD;
 const DETECTION_INTERVAL = AppConfig.DETECTION_INTERVAL;
+const PRODUCT_CAPTURE_QUALITY = AppConfig.PRODUCT_CAPTURE_QUALITY;
 const USE_MOCK_DETECTIONS = FeatureFlags.USE_MOCK_DETECTIONS;
 
 const transformDetection = (
@@ -100,7 +101,7 @@ export default function ScanProductScreen() {
         result = await simulateMockDetection();
       } else {
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.5,
+          quality: PRODUCT_CAPTURE_QUALITY,
           base64: false,
           skipProcessing: true,
         });

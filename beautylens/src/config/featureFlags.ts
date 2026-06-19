@@ -69,7 +69,10 @@ export const simulateMockDetection = (): Promise<{
 
 export const AppConfig = {
   DETECTION_CONFIDENCE_THRESHOLD: 0.3,
-  DETECTION_INTERVAL: 500,
+  DETECTION_INTERVAL: 1000,
+  FACE_DETECTION_INTERVAL: 1500,
+  PRODUCT_CAPTURE_QUALITY: 0.25,
+  FACE_CAPTURE_QUALITY: 0.45,
   API_BASE_URL_DEV:
     (Constants.expoConfig?.extra?.apiBaseUrlDev as string) || 'http://localhost:8000',
   API_BASE_URL_PROD:

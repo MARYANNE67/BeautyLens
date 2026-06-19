@@ -28,14 +28,14 @@ import { AppConfig, FeatureFlags } from '../config/featureFlags';
 import {
   renderDefaultMesh,
   renderClassBasedMesh,
-  getFacialRegions,
   type MeshShape,
   type MeshPolygon,
 } from '../utils/meshOverlays';
 import type { FaceMeshResult, ImageShape } from '../types';
 
 const API_BASE_URL = __DEV__ ? AppConfig.API_BASE_URL_DEV : AppConfig.API_BASE_URL_PROD;
-const FACE_DETECTION_INTERVAL = 1000;
+const FACE_DETECTION_INTERVAL = AppConfig.FACE_DETECTION_INTERVAL;
+const FACE_CAPTURE_QUALITY = AppConfig.FACE_CAPTURE_QUALITY;
 
 export default function FaceCameraScreen() {
   const router = useRouter();
@@ -50,6 +50,7 @@ export default function FaceCameraScreen() {
   const [faceMeshData, setFaceMeshData] = useState<FaceMeshResult | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
+  const [persistentMeshData, setPersistentMeshData] = useState<FaceMeshResult | null>(null);
   const [photoDimensions, setPhotoDimensions] = useState<ImageShape | null>(null);
   const [cameraViewDimensions, setCameraViewDimensions] = useState<{
     width: number;
@@ -58,37 +59,9 @@ export default function FaceCameraScreen() {
 
   const cameraRef = useRef<any>(null);
   const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const persistentMeshDataRef = useRef<FaceMeshResult | null>(null);
   const isDetectingRef = useRef(false);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      console.log('[Face Detection] Screen focused - starting face detection');
-      if (FeatureFlags.ENABLE_FACE_MESH) {
-        startFaceDetection();
-      }
-      return () => {
-        console.log('[Face Detection] Screen blurred - stopping face detection');
-        if (detectionIntervalRef.current) {
-          clearInterval(detectionIntervalRef.current);
-          detectionIntervalRef.current = null;
-        }
-        setFaceMeshData(null);
-        setFaceDetected(false);
-      };
-    }, [])
-  );
-
-  const startFaceDetection = () => {
-    if (!FeatureFlags.ENABLE_FACE_MESH) return;
-    detectionIntervalRef.current = setInterval(() => {
-      if (!isDetectingRef.current && cameraRef.current) {
-        detectFace();
-      }
-    }, FACE_DETECTION_INTERVAL);
-  };
-
-  const detectFace = async () => {
+  async function detectFace() {
     if (!cameraRef.current || isDetectingRef.current || !FeatureFlags.ENABLE_FACE_MESH) {
       return;
     }
@@ -98,7 +71,7 @@ export default function FaceCameraScreen() {
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.7,
+        quality: FACE_CAPTURE_QUALITY,
         base64: false,
         skipProcessing: true,
       });
@@ -125,10 +98,10 @@ export default function FaceCameraScreen() {
           const imgDims = result.image_dimensions || { width: photo.width, height: photo.height };
           setPhotoDimensions(imgDims);
           setFaceMeshData(result);
-          persistentMeshDataRef.current = result;
+          setPersistentMeshData(result);
           setFaceDetected(true);
         } else {
-          // Keep last mesh data to prevent blinking — only update detection status
+          // Keep last mesh data to prevent blinking - only update detection status.
           setFaceDetected(false);
         }
       } else {
@@ -142,10 +115,38 @@ export default function FaceCameraScreen() {
       isDetectingRef.current = false;
       setIsDetecting(false);
     }
-  };
+  }
+
+  function startFaceDetection() {
+    if (!FeatureFlags.ENABLE_FACE_MESH) return;
+    detectionIntervalRef.current = setInterval(() => {
+      if (!isDetectingRef.current && cameraRef.current) {
+        detectFace();
+      }
+    }, FACE_DETECTION_INTERVAL);
+  }
+
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('[Face Detection] Screen focused - starting face detection');
+      if (FeatureFlags.ENABLE_FACE_MESH) {
+        startFaceDetection();
+      }
+      return () => {
+        console.log('[Face Detection] Screen blurred - stopping face detection');
+        if (detectionIntervalRef.current) {
+          clearInterval(detectionIntervalRef.current);
+          detectionIntervalRef.current = null;
+        }
+        setFaceMeshData(null);
+        setPersistentMeshData(null);
+        setFaceDetected(false);
+      };
+    }, [])
+  );
 
   const renderFaceMesh = () => {
-    const meshDataToUse = faceMeshData || persistentMeshDataRef.current;
+    const meshDataToUse = faceMeshData || persistentMeshData;
 
     if (!meshDataToUse || !meshDataToUse.landmarks) {
       return null;
