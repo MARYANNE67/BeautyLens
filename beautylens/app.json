@@ -39,6 +39,10 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "apiBaseUrlDev": "http://10.0.0.234:8000",
+      "apiBaseUrlProd": "https://your-production-api.com"
     }
   }
 }
