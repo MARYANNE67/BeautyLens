@@ -23,7 +23,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
-import { detectFaceMesh } from '../services/api';
+import { detectFaceMeshForTryOn } from '../services/faceMesh';
 import { AppConfig, FeatureFlags } from '../config/featureFlags';
 import {
   renderDefaultMesh,
@@ -85,7 +85,7 @@ export default function FaceCameraScreen() {
         setPhotoDimensions({ width: photo.width, height: photo.height });
       }
 
-      const result = await detectFaceMesh(API_BASE_URL, photo.uri, false);
+      const result = await detectFaceMeshForTryOn(API_BASE_URL, photo.uri, false);
 
       if (result.status === 'error') {
         console.log('[Face Detection] API returned error:', result.message);
