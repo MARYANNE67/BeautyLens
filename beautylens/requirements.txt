@@ -8,4 +8,4 @@ albumentations
 fastapi
 uvicorn[standard]
 python-multipart
-mediapipe
+mediapipe==0.10.9
