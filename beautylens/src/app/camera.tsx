@@ -458,4 +458,20 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: '#000000',
   },
+  statusOverlay: {
+    position: 'absolute',
+    bottom: 120,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  statusText: {
+    color: '#fff',
+    fontSize: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 15,
+  },
 });
