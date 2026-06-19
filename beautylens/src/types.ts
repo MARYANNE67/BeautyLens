@@ -48,24 +48,35 @@ export interface DetectionResult {
   image_shape?: ImageShape;
 }
 
+/**
+ * A single MediaPipe landmark in pixel space (already scaled by the
+ * backend to the source photo's width/height — NOT normalised 0-1).
+ */
 export interface Landmark {
   x: number;
   y: number;
   z: number;
 }
 
+/**
+ * facial_regions as returned by get_facial_regions() in src/api/face_mesh.py.
+ * Each key is already an ORDERED ARRAY OF RESOLVED {x,y,z} POINTS forming
+ * (in most cases) a closed loop ready to render directly as a polygon —
+ * there is no separate indices[] array and no client-side lookup needed.
+ */
 export interface FacialRegions {
-  outer_lip?: number[];
-  upper_lip: number[];
-  lower_lip: number[];
-  left_eye: number[];
-  right_eye: number[];
-  face_oval: number[];
-  left_under_eye?: number[];
-  right_under_eye?: number[];
-  around_mouth?: number[];
-  left_eyeshadow?: number[];
-  right_eyeshadow?: number[];
+  outer_lip: Landmark[];
+  inner_lip: Landmark[];
+  upper_lip: Landmark[];
+  lower_lip: Landmark[];
+  left_eye: Landmark[];
+  right_eye: Landmark[];
+  face_oval: Landmark[];
+  left_under_eye: Landmark[];
+  right_under_eye: Landmark[];
+  around_mouth: Landmark[];
+  left_eyeshadow: Landmark[];
+  right_eyeshadow: Landmark[];
 }
 
 export interface FaceMeshResult {
