@@ -3,11 +3,50 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed paths
+        id: filter
+        run: |
+          BASE=${{ github.base_ref || 'main' }}
+          git fetch origin $BASE
+          CHANGED=$(git diff --name-only origin/$BASE...HEAD)
+          echo "$CHANGED"
+          if echo "$CHANGED" | grep -qE '^beautylens/src/|^beautylens/package|^beautylens/tsconfig|^beautylens/app\.json'; then
+            echo "frontend=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend=false" >> $GITHUB_OUTPUT
+          fi
+          if echo "$CHANGED" | grep -qE '^beautylens/src/api/|^beautylens/requirements\.txt|^beautylens/tests/'; then
+            echo "backend=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend=false" >> $GITHUB_OUTPUT
+          fi
+
   frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     name: Frontend — Type Check, Lint & Test
     runs-on: ubuntu-latest
     defaults:
@@ -39,6 +78,8 @@ jobs:
         run: npx expo export --platform web 2>&1 | grep -v "^warn"
 
   backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     name: Backend — Lint & Test
     runs-on: ubuntu-latest
 
