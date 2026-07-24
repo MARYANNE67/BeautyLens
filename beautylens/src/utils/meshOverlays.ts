@@ -210,8 +210,9 @@ function renderLipstickMesh(
           key: shapeKey,
           type: 'polygon',
           points: pathPoints,
-          color: '#FF1493',
-          opacity: 0.4,
+          color: '#C2185B',
+          opacity: 0.55,
+          strokeOpacity: 0.2,
           region,
         });
       }
@@ -261,8 +262,9 @@ function renderLipstickMesh(
           type: 'polygon',
           points: pathPoints,
           holes: innerLipPoints ? [innerLipPoints] : undefined,
-          color: '#FF1493',
-          opacity: 0.4,
+          color: '#C2185B',
+          opacity: 0.55,
+          strokeOpacity: 0.2,
           region: 'lips',
         });
       }
@@ -280,7 +282,7 @@ function renderLipLinerMesh(
   scalingParams: ScalingParams
 ): MeshShape[] {
   const shapes = renderLipstickMesh(facialRegions, scalingParams);
-  return shapes.map((shape) => ({ ...shape, opacity: 0.3 })) as MeshShape[];
+  return shapes.map((shape) => ({ ...shape, opacity: 0.35, strokeOpacity: 0.25 })) as MeshShape[];
 }
 
 /**
@@ -302,8 +304,8 @@ function renderFoundationMesh(
       key: 'face-overlay',
       type: 'polygon',
       points: pathPoints,
-      color: '#FFD700',
-      opacity: 0.3,
+      color: '#D4956A',
+      opacity: 0.22,
       region: 'face',
     });
   }
@@ -340,8 +342,9 @@ function renderConcealerMesh(
         key: shapeKey,
         type: 'polygon',
         points: pathPoints,
-        color: '#FFD700',
-        opacity: 0.4,
+        color: '#E8C9A0',
+        opacity: 0.3,
+        strokeOpacity: 0.05,
         region,
       });
     }
@@ -373,8 +376,8 @@ function renderEyelinerMesh(
       key: 'left-eye-overlay',
       type: 'polygon',
       points: leftEyePoints,
-      color: '#0000FF',
-      opacity: 0.35,
+      color: '#1A1A1A',
+      opacity: 0.7,
       region: 'left-eye',
     });
   }
@@ -387,8 +390,8 @@ function renderEyelinerMesh(
       key: 'right-eye-overlay',
       type: 'polygon',
       points: rightEyePoints,
-      color: '#0000FF',
-      opacity: 0.35,
+      color: '#1A1A1A',
+      opacity: 0.7,
       region: 'right-eye',
     });
   }
@@ -416,9 +419,9 @@ function renderEyeshadowMesh(
       key: 'left-eyeshadow-overlay',
       type: 'polygon',
       points: leftEyeshadowPoints,
-      color: '#8A2BE2',
-      opacity: 0.28,
-      strokeOpacity: 0.25,
+      color: '#6D3B7C',
+      opacity: 0.35,
+      strokeOpacity: 0.1,
       region: 'left-eyeshadow',
     });
   }
@@ -431,9 +434,9 @@ function renderEyeshadowMesh(
       key: 'right-eyeshadow-overlay',
       type: 'polygon',
       points: rightEyeshadowPoints,
-      color: '#8A2BE2',
-      opacity: 0.28,
-      strokeOpacity: 0.25,
+      color: '#6D3B7C',
+      opacity: 0.35,
+      strokeOpacity: 0.1,
       region: 'right-eyeshadow',
     });
   }
@@ -449,7 +452,7 @@ function renderMascaraMesh(
   scalingParams: ScalingParams
 ): MeshShape[] {
   const shapes = renderEyelinerMesh(facialRegions, scalingParams);
-  return shapes.map((shape) => ({ ...shape, opacity: 0.4, color: '#000000' })) as MeshShape[];
+  return shapes.map((shape) => ({ ...shape, opacity: 0.65, color: '#1A1A1A' })) as MeshShape[];
 }
 
 /**
@@ -460,7 +463,7 @@ function renderBlushMesh(
   scalingParams: ScalingParams
 ): MeshShape[] {
   const shapes = renderFoundationMesh(facialRegions, scalingParams);
-  return shapes.map((shape) => ({ ...shape, opacity: 0.35, color: '#FF69B4' })) as MeshShape[];
+  return shapes.map((shape) => ({ ...shape, opacity: 0.3, color: '#E8748A' })) as MeshShape[];
 }
 
 /**
@@ -471,5 +474,5 @@ function renderHighlighterMesh(
   scalingParams: ScalingParams
 ): MeshShape[] {
   const shapes = renderFoundationMesh(facialRegions, scalingParams);
-  return shapes.map((shape) => ({ ...shape, opacity: 0.25, color: '#FFFF00' })) as MeshShape[];
+  return shapes.map((shape) => ({ ...shape, opacity: 0.3, color: '#F5E6A3' })) as MeshShape[];
 }
