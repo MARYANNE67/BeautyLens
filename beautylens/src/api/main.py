@@ -34,6 +34,7 @@ except ImportError as e:
 model: Optional[YOLO] = None
 model_path: Optional[str] = None
 confidence_threshold: float = 0.25
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
 
 
 def load_model(path: str):
@@ -51,35 +52,6 @@ def load_model(path: str):
         print(f"Error loading model: {str(e)}")
         raise
 
-
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     """Lifespan event handler for startup and shutdown"""
-#     # Startup
-#     print("Starting up API server...")
-#     # Try absolute path first, then fallback to relative path
-#     absolute_model_path = r"C:\Users\itsme\OneDrive\Desktop\School Things\SWE Year 4\SEA710\sea710-project\models\final\best.pt"
-#     relative_model_path = "models/final/best.pt"
-    
-#     # Determine which path to use
-#     if os.path.exists(absolute_model_path):
-#         default_model_path = absolute_model_path
-#     elif os.path.exists(relative_model_path):
-#         default_model_path = relative_model_path
-#     else:
-#         print("Warning: Default model file not found at either absolute or relative path")
-#         default_model_path = None
-    
-#     if default_model_path:
-#         try:
-#             load_model(default_model_path)
-#         except Exception as e:
-#             print(f"Could not load default model: {str(e)}")
-    
-#     yield
-    
-#     # Shutdown
-#     print("Shutting down API server...")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -105,9 +77,11 @@ app = FastAPI(
 )
 
 # Enable CORS for mobile app
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:19000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your mobile app's origin
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -177,10 +151,13 @@ async def detect_products(
     try:
         # Read image file
         image_bytes = await image.read()
-        
+
         if not image_bytes or len(image_bytes) == 0:
             raise HTTPException(status_code=400, detail="Empty image file received")
-        
+
+        if len(image_bytes) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail=f"Image exceeds maximum allowed size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
+
         print(f"[API] Received image: {len(image_bytes)} bytes, content_type: {image.content_type}")
         
         # Convert bytes to numpy array
@@ -275,6 +252,10 @@ async def detect_with_annotated_image(
     try:
         # Read and process image
         image_bytes = await image.read()
+
+        if len(image_bytes) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail=f"Image exceeds maximum allowed size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
+
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
@@ -345,6 +326,8 @@ async def detect_with_annotated_image(
             "annotated_image": f"data:image/jpeg;base64,{img_base64}"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
@@ -390,14 +373,17 @@ async def detect_face_mesh(
     try:
         # Read image file
         image_bytes = await image.read()
-        
+
+        if len(image_bytes) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail=f"Image exceeds maximum allowed size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
+
         # Convert bytes to numpy array
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
+
         if img is None:
             raise HTTPException(status_code=400, detail="Invalid image format")
-        
+
         # Get face mesh detector
         detector = get_face_mesh_detector()
         
@@ -461,6 +447,8 @@ async def detect_face_mesh(
         
         return response
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Face mesh detection error: {str(e)}")
 

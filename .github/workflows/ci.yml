@@ -44,6 +44,40 @@ jobs:
             echo "backend=false" >> $GITHUB_OUTPUT
           fi
 
+  security:
+    name: Security — Repo Hygiene Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for hardcoded absolute/user paths
+        run: |
+          if grep -rEn '/Users/[A-Za-z0-9_.-]+|/home/[A-Za-z0-9_.-]+|OneDrive' --include="*.py" beautylens/src/; then
+            echo "::error::Hardcoded absolute/user-specific path found in source files"
+            exit 1
+          fi
+
+      - name: Confirm .env is not committed
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$'; then
+            echo "::error::.env file is committed to the repository"
+            exit 1
+          fi
+
+      - name: Check for large model weight files (>5MB)
+        run: |
+          status=0
+          for f in $(git ls-files '*.pt'); do
+            size=$(stat -c%s "$f")
+            if [ "$size" -gt 5242880 ]; then
+              echo "::error file=$f::Model weight file $f is $size bytes (>5MB) and should not be committed"
+              status=1
+            fi
+          done
+          exit $status
+
   frontend:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
