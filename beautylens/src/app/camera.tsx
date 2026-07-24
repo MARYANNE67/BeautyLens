@@ -84,6 +84,8 @@ export default function FaceCameraScreen() {
   const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const persistentMeshDataRef = useRef<FaceMeshResult | null>(null);
   const isDetectingRef = useRef(false);
+  const smoothedLandmarksRef = useRef<{ x: number; y: number; z: number }[] | null>(null);
+  const SMOOTHING_FACTOR = 0.35; // lower = smoother but more lag, higher = snappier but shakier
 
   useFocusEffect(
     React.useCallback(() => {
@@ -148,15 +150,41 @@ export default function FaceCameraScreen() {
       }
 
       if (result.status === 'success') {
+        // if (result.face_detected && result.landmarks && result.landmarks.length > 0) {
+        //   const imgDims = result.image_dimensions || { width: photo.width, height: photo.height };
+        //   setPhotoDimensions(imgDims);
+        //   setFaceMeshData(result);
+        //   persistentMeshDataRef.current = result;
+        //   setFaceDetected(true);
+        // } else {
+        //   // Keep last mesh data to prevent blinking — only update detection status
+        //   setFaceDetected(false);
+        // }
+
         if (result.face_detected && result.landmarks && result.landmarks.length > 0) {
           const imgDims = result.image_dimensions || { width: photo.width, height: photo.height };
           setPhotoDimensions(imgDims);
+
+          // Smooth landmarks — blend new positions with previous to reduce shakiness
+          const newLandmarks = result.landmarks;
+          if (smoothedLandmarksRef.current && smoothedLandmarksRef.current.length === newLandmarks.length) {
+            const smoothed = newLandmarks.map((lm, i) => {
+              const prev = smoothedLandmarksRef.current![i];
+              return {
+                x: prev.x + SMOOTHING_FACTOR * (lm.x - prev.x),
+                y: prev.y + SMOOTHING_FACTOR * (lm.y - prev.y),
+                z: prev.z + SMOOTHING_FACTOR * (lm.z - prev.z),
+              };
+            });
+            smoothedLandmarksRef.current = smoothed;
+            result.landmarks = smoothed;
+          } else {
+            smoothedLandmarksRef.current = newLandmarks;
+          }
+
           setFaceMeshData(result);
           persistentMeshDataRef.current = result;
           setFaceDetected(true);
-        } else {
-          // Keep last mesh data to prevent blinking — only update detection status
-          setFaceDetected(false);
         }
       } else {
         setFaceDetected(false);
