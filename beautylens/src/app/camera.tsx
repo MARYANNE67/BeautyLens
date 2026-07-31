@@ -18,6 +18,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
+  Image
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
@@ -25,6 +26,9 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { detectFaceMesh } from '../services/api';
 import { AppConfig, FeatureFlags } from '../config/featureFlags';
+import { captureRef } from 'react-native-view-shot';
+import * as MediaLibrary from 'expo-media-library';
+import * as Linking from 'expo-linking';
 import {
   renderDefaultMesh,
   renderClassBasedMesh,
@@ -72,8 +76,13 @@ export default function FaceCameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraType = 'front' as const;
   const [faceMeshData, setFaceMeshData] = useState<FaceMeshResult | null>(null);
+  const [photoLoaded, setPhotoLoaded] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [capturedPhotoSize, setCapturedPhotoSize] = useState<{ width: number; height: number } | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  
   const [photoDimensions, setPhotoDimensions] = useState<ImageShape | null>(null);
   const [cameraViewDimensions, setCameraViewDimensions] = useState<{
     width: number;
@@ -82,10 +91,22 @@ export default function FaceCameraScreen() {
 
   const cameraRef = useRef<any>(null);
   const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const capturedViewRef = useRef<View>(null);
   const persistentMeshDataRef = useRef<FaceMeshResult | null>(null);
   const isDetectingRef = useRef(false);
   const smoothedLandmarksRef = useRef<{ x: number; y: number; z: number }[] | null>(null);
   const SMOOTHING_FACTOR = 0.35; // lower = smoother but more lag, higher = snappier but shakier
+
+
+
+  const startFaceDetection = React.useCallback(() => {
+    if (!FeatureFlags.ENABLE_FACE_MESH) return;
+    detectionIntervalRef.current = setInterval(() => {
+      if (!isDetectingRef.current && cameraRef.current) {
+        detectFace();
+      }
+    }, FACE_DETECTION_INTERVAL);
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -102,19 +123,87 @@ export default function FaceCameraScreen() {
         setFaceMeshData(null);
         setFaceDetected(false);
       };
-    }, [])
+    }, [startFaceDetection])
   );
 
-  const startFaceDetection = () => {
-    if (!FeatureFlags.ENABLE_FACE_MESH) return;
-    if (!isDetectingRef.current && cameraRef.current) {
-      detectFace();
-    }
-    detectionIntervalRef.current = setInterval(() => {
-      if (!isDetectingRef.current && cameraRef.current) {
-        detectFace();
+  const handleCapture = async () => {
+    if (!cameraRef.current || isCapturing) return;
+    setIsCapturing(true);
+
+    try {
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+        detectionIntervalRef.current = null;
       }
-    }, FACE_DETECTION_INTERVAL);
+
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.92,
+        base64: false,
+        skipProcessing: false,
+      });
+
+      if (!photo?.uri) return;
+
+      // Run face mesh one more time on the high quality photo
+      const result = await detectFaceMesh(API_BASE_URL, photo.uri, false);
+      if (result.face_detected && result.landmarks?.length > 0) {
+        const imgDims = result.image_dimensions || { width: photo.width, height: photo.height };
+        setPhotoDimensions(imgDims);
+        setFaceMeshData(result);
+        persistentMeshDataRef.current = result;
+        setFaceDetected(true);
+      }
+
+      // Store both the photo URI and its actual pixel dimensions
+      setCapturedPhotoSize({ width: photo.width, height: photo.height });
+      setCapturedPhoto(photo.uri);
+
+    } catch (error) {
+      console.log('[Capture] Error:', (error as Error).message);
+      startFaceDetection();
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
+  const handleSavePhoto = async () => {
+    if (!capturedPhoto || !capturedViewRef.current) return;
+    if (!photoLoaded) {
+      alert('Please wait a moment for the photo to load.');
+      return;
+    }
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Linking.openSettings();
+        return;
+      }
+
+      // Small delay to ensure everything is rendered
+     await new Promise(resolve => setTimeout(resolve, 1500));
+
+      const uri = await captureRef(capturedViewRef, {
+        format: 'jpg',
+        quality: 0.92,
+        result: 'tmpfile',
+      });
+
+      const asset = await MediaLibrary.createAssetAsync(uri);
+      await MediaLibrary.createAlbumAsync('BeautyLens', asset, false);
+      alert('Saved to BeautyLens album! 💄');
+    } catch (error) {
+      console.log('[Save] Error:', (error as Error).message);
+    }
+  };
+
+  const handleRetake = () => {
+    setCapturedPhoto(null);
+    setCapturedPhotoSize(null);
+    setPhotoLoaded(false);
+    setFaceMeshData(null);
+    persistentMeshDataRef.current = null;
+    setFaceDetected(false);
+    startFaceDetection();
   };
 
   const detectFace = async () => {
@@ -291,7 +380,7 @@ export default function FaceCameraScreen() {
 
                 return (
                   <Path
-                    key={shape.key}
+                    key={`live-${shape.key}`}
                     d={pathData}
                     fill={shape.color || '#FF1493'}
                     fillRule={shape.holes?.length ? 'evenodd' : 'nonzero'}
@@ -358,74 +447,181 @@ export default function FaceCameraScreen() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <StatusBar style="light" />
+  if (capturedPhoto && capturedPhotoSize) {
+    const screenWidth = Dimensions.get('window').width;
+    const screenHeight = Dimensions.get('window').height - 120; // subtract controls height
 
-      <CameraView
-        ref={cameraRef}
-        style={styles.camera}
-        facing={cameraType}
-        onLayout={(event) => {
-          const { width, height } = event.nativeEvent.layout;
-          setCameraViewDimensions({ width, height });
-        }}
-      />
+    // Calculate how the image fits on screen with resizeMode="cover"
+    const photoAspect = capturedPhotoSize.width / capturedPhotoSize.height;
+    const screenAspect = screenWidth / screenHeight;
 
-      <View style={styles.cameraOverlay} pointerEvents="box-none">
-        <View style={styles.productInfoOverlay} pointerEvents="none">
-          <Text style={styles.productName} numberOfLines={1}>
-            {selectedProductTypes.length > 1
-              ? `${selectedProductTypes.length} product look`
-              : productName || productType || 'Virtual Try-On'}
-          </Text>
-          {selectedProductNames.length > 1 && (
-            <Text style={styles.lookProducts} numberOfLines={1}>
-              {selectedProductNames.join(' · ')}
+    let displayWidth: number;
+    let displayHeight: number;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (photoAspect > screenAspect) {
+      // Photo wider than screen — letterbox on sides
+      displayHeight = screenHeight;
+      displayWidth = screenHeight * photoAspect;
+      offsetX = (screenWidth - displayWidth) / 2;
+    } else {
+      // Photo taller than screen — letterbox top/bottom
+      displayWidth = screenWidth;
+      displayHeight = screenWidth / photoAspect;
+      offsetY = (screenHeight - displayHeight) / 2;
+    }
+
+    const scaleX = displayWidth / capturedPhotoSize.width;
+    const scaleY = displayHeight / capturedPhotoSize.height;
+
+    // Re-render overlay with correct scaling for the static photo
+    const meshDataToUse = persistentMeshDataRef.current;
+    const overlayShapes = meshDataToUse?.landmarks && selectedProductTypes.length > 0
+      ? selectedProductTypes.flatMap((type) =>
+          renderClassBasedMesh(type, meshDataToUse, {
+            landmarks: meshDataToUse.landmarks,
+            viewWidth: screenWidth,
+            viewHeight: screenHeight,
+            scaleX,
+            scaleY,
+            offsetX,
+            offsetY,
+            mirrorX: true,
+          })
+        )
+      : [];
+
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <View ref={capturedViewRef} collapsable={false} style={{ flex: 1, backgroundColor: '#000' }}>
+            <Image
+              source={{ uri: capturedPhoto }}
+              style={{ 
+                width: screenWidth, 
+                height: screenHeight,
+                transform: [{ scaleX: -1 }]
+              }}
+              resizeMode="cover"
+              onLoadEnd={() => setPhotoLoaded(true)}
+            />
+            <Svg
+              style={StyleSheet.absoluteFill}
+              width={screenWidth}
+              height={screenHeight}
+              pointerEvents="none"
+            >
+            {overlayShapes.map((shape) => {
+              if (shape.type !== 'polygon') return null;
+              const poly = shape as MeshPolygon;
+              if (!poly.points?.length) return null;
+              const pathData =
+                poly.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z';
+              return (
+                <Path
+                  key={`snap-${poly.key}`}
+                  d={pathData}
+                  fill={poly.color}
+                  fillOpacity={poly.opacity}
+                  stroke={poly.color}
+                  strokeWidth={1.5}
+                  strokeOpacity={poly.strokeOpacity ?? 0.2}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              );
+            })}
+           </Svg>
+          </View>
+        </View>
+        <View style={styles.controls}>
+          <TouchableOpacity style={styles.backButton} onPress={handleRetake}>
+            <Text style={styles.backButtonText}>Retake</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.captureButton, { backgroundColor: '#C2185B' }]}
+            onPress={handleSavePhoto}
+          >
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>Save</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.settingsButton} onPress={() => router.back()}>
+            <Text style={styles.settingsButtonText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+
+        <CameraView
+          ref={cameraRef}
+          style={styles.camera}
+          facing={cameraType}
+          onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            setCameraViewDimensions({ width, height });
+          }}
+        />
+
+        <View style={styles.cameraOverlay} pointerEvents="box-none">
+          <View style={styles.productInfoOverlay} pointerEvents="none">
+            <Text style={styles.productName} numberOfLines={1}>
+              {selectedProductTypes.length > 1
+                ? `${selectedProductTypes.length} product look`
+                : productName || productType || 'Virtual Try-On'}
             </Text>
-          )}
-          <Text style={styles.instructionText}>
-            {FeatureFlags.ENABLE_FACE_MESH
-              ? faceDetected
-                ? 'Face detected!'
-                : 'Position your face in the frame'
-              : 'Face mesh detection disabled'}
-          </Text>
-          {isDetecting && FeatureFlags.ENABLE_FACE_MESH && !persistentMeshDataRef.current && (
-            <ActivityIndicator size="small" color="#fff" style={{ marginTop: 8 }} />
+            {selectedProductNames.length > 1 && (
+              <Text style={styles.lookProducts} numberOfLines={1}>
+                {selectedProductNames.join(' · ')}
+              </Text>
+            )}
+            <Text style={styles.instructionText}>
+              {FeatureFlags.ENABLE_FACE_MESH
+                ? faceDetected
+                  ? 'Face detected!'
+                  : 'Position your face in the frame'
+                : 'Face mesh detection disabled'}
+            </Text>
+            {isDetecting && FeatureFlags.ENABLE_FACE_MESH && !persistentMeshDataRef.current && (
+              <ActivityIndicator size="small" color="#fff" style={{ marginTop: 8 }} />
+            )}
+          </View>
+
+          {FeatureFlags.ENABLE_FACE_MESH && renderFaceMesh()}
+
+          {FeatureFlags.ENABLE_FACE_MESH && !faceDetected && !isDetecting && (
+            <View style={styles.statusOverlay} pointerEvents="none">
+              <Text style={styles.statusText}>Waiting for face detection...</Text>
+            </View>
           )}
         </View>
 
-        {FeatureFlags.ENABLE_FACE_MESH && renderFaceMesh()}
+        <View style={styles.controls}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
 
-        {FeatureFlags.ENABLE_FACE_MESH && !faceDetected && !isDetecting && (
-          <View style={styles.statusOverlay} pointerEvents="none">
-            <Text style={styles.statusText}>Waiting for face detection...</Text>
-          </View>
-        )}
+          <TouchableOpacity
+            style={styles.captureButton}
+            onPress={handleCapture}
+          >
+            <View style={styles.captureButtonInner} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => console.log('Open settings')}
+          >
+            <Text style={styles.settingsButtonText}>Settings</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-
-      <View style={styles.controls}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.captureButton}
-          onPress={() => console.log('Capture virtual try-on')}
-        >
-          <View style={styles.captureButtonInner} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsButton}
-          onPress={() => console.log('Open settings')}
-        >
-          <Text style={styles.settingsButtonText}>Settings</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
 }
 
 const styles = StyleSheet.create({
@@ -553,4 +749,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 15,
   },
+  capturedContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    position: 'relative',
+  },
+  capturedImage: {
+  flex: 1,
+  width: '100%',
+},
 });
