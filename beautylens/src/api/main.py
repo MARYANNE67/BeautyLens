@@ -15,6 +15,14 @@ from typing import Optional
 import os
 from pathlib import Path
 from src.api.product_classes import normalize_class_name, ProductClass, get_display_name
+from src.api.db import init_db, SessionLocal
+from src.api.firebase_auth import init_firebase
+from src.api.seed_data import seed_shade_catalog
+from src.api.routers.auth import router as auth_router
+from src.api.routers.profile import router as profile_router
+from src.api.routers.skin_scan import router as skin_scan_router
+from src.api.routers.recommendations import router as recommendations_router
+from src.api.routers.tryon import router as tryon_router
 import os
 from dotenv import load_dotenv
 
@@ -65,7 +73,24 @@ async def lifespan(app: FastAPI):
             print(f"Could not load default model: {str(e)}")
     else:
         print(f"Warning: Model file not found at {default_model_path}")
-    
+
+    # Non-fatal: the detection/face-mesh endpoints don't need auth, so a missing
+    # service-account key degrades the authenticated routes to a clear 503
+    # rather than taking the whole API down.
+    firebase_error = init_firebase()
+    if firebase_error:
+        print(f"Warning: {firebase_error}")
+    else:
+        print("Firebase Admin initialised")
+
+    init_db()
+    with SessionLocal() as db:
+        seeded = seed_shade_catalog(db)
+        if seeded:
+            print(f"Seeded shade catalog: {seeded} shades")
+        else:
+            print("Shade catalog already seeded, skipping")
+
     yield
     print("Shutting down API server...")
 
@@ -86,6 +111,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router)
+app.include_router(profile_router)
+app.include_router(skin_scan_router)
+app.include_router(recommendations_router)
+app.include_router(tryon_router)
 
 
 @app.get("/")

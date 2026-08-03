@@ -9,3 +9,14 @@ fastapi
 uvicorn[standard]
 python-multipart
 mediapipe==0.10.9
+sqlalchemy
+firebase-admin
+# firebase-admin pulls in google-cloud-* which want protobuf>=6, but mediapipe
+# 0.10.9 only works with protobuf<4 -- installing firebase-admin unpinned
+# upgrades protobuf and makes FaceMesh construction fail with
+# "FieldDescriptor object has no attribute 'label'". We only use
+# firebase_admin.auth (no Firestore/Storage), and that path works fine on 3.x,
+# so the pin stays until mediapipe is upgraded.
+protobuf<4
+pytest
+httpx

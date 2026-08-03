@@ -4,6 +4,42 @@ All notable changes to BeautyLens will be documented in this file.
 
 ---
 
+## 2026-08-02
+
+Shade matching: skin scan to cross-brand foundation and concealer recommendations.
+
+### Added
+
+- Shade catalog built from measured swatch colour — 5,109 shades from The Pudding's `allShades.csv`, replacing 58 synthetic entries whose colour was derived from their own depth labels
+- Per-shade colour swatches on recommendations and scan results
+- "Find this shade" search links, generated per request so they cannot go stale
+- White balance at capture (sclera-based, with a plausibility check) and outlier rejection across the 15 skin samples
+- Scan diagnostics persisted: per-region samples, white-balance gains, rejected samples
+- `data/evaluate_matching.py` — per-depth-band match quality, reported on worst band rather than mean
+
+### Changed
+
+- Undertone classified by hue angle instead of absolute a\*/b\* position
+- Undertone confirm screen is now a result page: undertone, depth, closest shade, and what to look for on a shade chart
+- Recommendations page redesigned
+- Price is null when unknown, instead of a fabricated per-brand estimate
+- Undertone mismatch penalty 12.0 → 6.0, re-measured against the real catalog
+
+### Fixed
+
+- Undertone estimator returned "cool" for every real face — catalog centroids describe swatches on white, which real skin sits outside
+- Samples landing on hair or shadow pulled skin depth ~14 L\* too dark
+- White balance could strip all redness from skin (a\* = 0)
+- "Formulated primarily for  skin" rendered on every recommendation
+- Foundation/concealer hybrids filed as concealer, thinning both categories
+- 1,861 catalog rows dropped for a missing shade name that was present in another column
+
+### Removed
+
+- Delete Account (Firebase `requires-recent-login` made it fail on any session more than a few minutes old)
+
+---
+
 ## 2026-06-19
 
 ### Added

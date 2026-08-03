@@ -67,12 +67,31 @@ export const simulateMockDetection = (): Promise<{
   });
 };
 
+/**
+ * Dev API host resolution, in priority order:
+ * 1. EXPO_PUBLIC_API_BASE_URL_DEV (from .env, gitignored) -- explicit override,
+ *    e.g. for a tunnel URL or a non-default backend port.
+ * 2. Metro's own hostUri (e.g. "192.168.2.66:8081") -- Expo Go/dev-client
+ *    already connected to this machine to load the JS bundle, so its IP is
+ *    known to be reachable *right now*. This means the backend URL survives
+ *    Wi-Fi/DHCP changes without editing any config file.
+ * 3. localhost -- web/simulator fallback where the device shares the host's
+ *    network namespace.
+ */
+function resolveDevApiBaseUrl(): string {
+  const envOverride = process.env.EXPO_PUBLIC_API_BASE_URL_DEV;
+  if (envOverride) return envOverride;
+
+  const hostUri = Constants.expoConfig?.hostUri;
+  const host = hostUri?.split(':')[0];
+  if (host) return `http://${host}:8000`;
+
+  return 'http://localhost:8000';
+}
+
 export const AppConfig = {
   DETECTION_CONFIDENCE_THRESHOLD: 0.3,
   DETECTION_INTERVAL: 500,
-  API_BASE_URL_DEV:
-    (Constants.expoConfig?.extra?.apiBaseUrlDev as string) || 'http://localhost:8000',
-  API_BASE_URL_PROD:
-    (Constants.expoConfig?.extra?.apiBaseUrlProd as string) ||
-    'https://your-production-api.com',
+  API_BASE_URL_DEV: resolveDevApiBaseUrl(),
+  API_BASE_URL_PROD: process.env.EXPO_PUBLIC_API_BASE_URL_PROD || 'https://your-production-api.com',
 };
