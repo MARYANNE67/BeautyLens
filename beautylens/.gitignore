@@ -65,7 +65,23 @@ __pycache__/
 # ML models
 models/final/*.pt
 
+# App database (recreated from data/shade_catalog_seed.json on startup)
+*.db
+
+# Firebase service-account keys -- these grant full admin access to the project
+*serviceaccount*.json
+*service-account*.json
+firebase-adminsdk*.json
+google-services.json
+GoogleService-Info.plist
+
 # Claude Code
 .claude/
 CLAUDE.md
 AGENTS.md
+
+# Shade catalog working data
+# Regenerable third-party source (2.3 MB) -- see development.md for the download.
+data/sources/
+# Personal scan measurements captured during development.
+data/stability_baseline.json
