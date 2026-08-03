@@ -1,0 +1,33 @@
+# Coverage config for the backend job in .github/workflows/ci.yml, which runs
+# pytest from the repository root.
+#
+# The 80% gate applies to the pure-logic modules the test suite actually
+# covers -- colour analysis, undertone estimation, shade matching, try-on
+# rendering and the ORM models.
+#
+# Everything under `omit` has no tests today. It is listed explicitly rather
+# than hidden behind a lowered threshold so that each entry is visible, and so
+# that adding tests for a module means deleting its line here rather than
+# quietly moving a number. The HTTP layer needs request-level tests with a test
+# database and mocked Firebase auth, which is its own piece of work.
+
+[run]
+omit =
+    # FastAPI app wiring and startup.
+    */src/api/main.py
+    # HTTP layer: needs integration tests with auth mocking.
+    */src/api/routers/*
+    */src/api/firebase_auth.py
+    */src/api/ownership.py
+    */src/api/seed_data.py
+    # Engine/session setup, exercised only via a live database.
+    */src/api/db.py
+    # MediaPipe wrapper -- requires a real detector and real images.
+    */src/api/face_mesh.py
+    # Predates the shade-matching work and is unrelated to it.
+    */src/api/product_classes.py
+    */tests/*
+
+[report]
+skip_covered = false
+show_missing = true
