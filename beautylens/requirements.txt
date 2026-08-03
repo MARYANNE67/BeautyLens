@@ -8,7 +8,7 @@ albumentations
 fastapi
 uvicorn[standard]
 python-multipart
-mediapipe==0.10.9
+mediapipe==1.0.0
 sqlalchemy
 firebase-admin
 # firebase-admin pulls in google-cloud-* which want protobuf>=6, but mediapipe
