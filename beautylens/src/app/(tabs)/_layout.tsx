@@ -39,20 +39,33 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="history"
+        name="recommendations"
         options={{
-          title: 'History',
+          title: 'Shade Match',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'time' : 'time-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'happy' : 'happy-outline'} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="collection"
+        options={{
+          title: 'Collection',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'bag-handle' : 'bag-handle-outline'} size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Settings',
+          title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'settings' : 'settings-outline'} size={24} color={color} />
+            <Ionicons
+              name={focused ? 'person-circle' : 'person-circle-outline'}
+              size={25}
+              color={color}
+            />
           ),
         }}
       />
