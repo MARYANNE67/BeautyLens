@@ -217,7 +217,8 @@ export default function ScanProductScreen() {
         setSelectedProduct(null);
         setSelectedLookTypes([]);
       };
-    }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   );
 
   useEffect(() => {
