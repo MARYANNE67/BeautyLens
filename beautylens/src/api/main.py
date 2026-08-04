@@ -25,6 +25,8 @@ from src.api.routers.recommendations import router as recommendations_router
 from src.api.routers.tryon import router as tryon_router
 import os
 from dotenv import load_dotenv
+from src.api.product_recognition import extract_text_from_image_region, parse_product_from_text
+from fastapi import FastAPI, File, UploadFile, HTTPException
 
 load_dotenv()
 
@@ -158,112 +160,223 @@ async def load_model_endpoint(data: dict):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# @app.post("/detect")
+# async def detect_products(
+#     image: UploadFile = File(...),
+#     confidence: Optional[float] = None
+# ):
+#     """
+#     Detect makeup products in uploaded image
+    
+#     Args:
+#         image: Image file (JPEG, PNG, etc.)
+#         confidence: Confidence threshold (0.0-1.0), defaults to global threshold
+    
+#     Returns:
+#         JSON with detections including bounding boxes, classes, and confidence scores
+#     """
+#     if model is None:
+#         raise HTTPException(
+#             status_code=503,
+#             detail="Model not loaded. Please load a model first using /load-model"
+#         )
+    
+#     try:
+#         # Read image file
+#         image_bytes = await image.read()
+
+#         if not image_bytes or len(image_bytes) == 0:
+#             raise HTTPException(status_code=400, detail="Empty image file received")
+
+#         if len(image_bytes) > MAX_UPLOAD_SIZE:
+#             raise HTTPException(status_code=413, detail=f"Image exceeds maximum allowed size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
+
+#         print(f"[API] Received image: {len(image_bytes)} bytes, content_type: {image.content_type}")
+        
+#         # Convert bytes to numpy array
+#         nparr = np.frombuffer(image_bytes, np.uint8)
+#         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+#         if img is None:
+#             print(f"[API] Failed to decode image. First 20 bytes: {image_bytes[:20]}")
+#             raise HTTPException(status_code=400, detail="Invalid image format - could not decode image")
+        
+#         print(f"[API] Image decoded successfully: shape={img.shape}")
+        
+#         # Use provided confidence or default
+#         conf_threshold = confidence if confidence is not None else confidence_threshold
+        
+#         print(f"[API] Running YOLO inference with confidence threshold: {conf_threshold}")
+        
+#         # Run YOLO inference
+#         results = model(img, conf=conf_threshold, verbose=False)
+        
+#         print(f"[API] YOLO inference completed")
+        
+#         # Parse results
+#         detections = []
+#         for result in results:
+#             boxes = result.boxes
+#             for box in boxes:
+#                 # Get box coordinates
+#                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                
+#                 # Get class and confidence
+#                 conf = float(box.conf[0].cpu().numpy())
+#                 class_id = int(box.cls[0].cpu().numpy())
+#                 raw_class_name = result.names[class_id] if hasattr(result, 'names') else f"Class {class_id}"
+                
+#                 # Normalize class name to ProductClass enum
+#                 normalized_class = normalize_class_name(raw_class_name)
+#                 class_name = normalized_class.value if normalized_class else raw_class_name
+#                 display_name = get_display_name(normalized_class) if normalized_class else raw_class_name
+                
+#                 detections.append({
+#                     "class_id": class_id,
+#                     "class_name": class_name,  # Normalized enum value
+#                     "display_name": display_name,  # Human-readable name
+#                     "raw_class_name": raw_class_name,  # Original from model
+#                     "confidence": round(conf, 4),
+#                     "bbox": {
+#                         "x1": float(x1),
+#                         "y1": float(y1),
+#                         "x2": float(x2),
+#                         "y2": float(y2)
+#                     }
+#                 })
+        
+#         print(f"[API] Returning {len(detections)} detections")
+        
+#         return {
+#             "status": "success",
+#             "detections": detections,
+#             "count": len(detections),
+#             "image_shape": {
+#                 "height": int(img.shape[0]),
+#                 "width": int(img.shape[1])
+#             }
+#         }
+        
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         print(f"[API] Detection error: {str(e)}")
+#         import traceback
+#         traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=f"Detection error: {str(e)}")
+
+from src.api.product_recognition import extract_text_from_image_region, parse_product_from_text
+
 @app.post("/detect")
 async def detect_products(
     image: UploadFile = File(...),
-    confidence: Optional[float] = None
+    confidence: float = 0.25,
 ):
-    """
-    Detect makeup products in uploaded image
-    
-    Args:
-        image: Image file (JPEG, PNG, etc.)
-        confidence: Confidence threshold (0.0-1.0), defaults to global threshold
-    
-    Returns:
-        JSON with detections including bounding boxes, classes, and confidence scores
-    """
+    contents = await image.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty image file received")
+
     if model is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Model not loaded. Please load a model first using /load-model"
-        )
-    
+        raise HTTPException(status_code=503, detail="Model not loaded")
+
     try:
-        # Read image file
-        image_bytes = await image.read()
-
-        if not image_bytes or len(image_bytes) == 0:
-            raise HTTPException(status_code=400, detail="Empty image file received")
-
-        if len(image_bytes) > MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=413, detail=f"Image exceeds maximum allowed size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
-
-        print(f"[API] Received image: {len(image_bytes)} bytes, content_type: {image.content_type}")
-        
-        # Convert bytes to numpy array
-        nparr = np.frombuffer(image_bytes, np.uint8)
+        nparr = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
         if img is None:
-            print(f"[API] Failed to decode image. First 20 bytes: {image_bytes[:20]}")
-            raise HTTPException(status_code=400, detail="Invalid image format - could not decode image")
-        
-        print(f"[API] Image decoded successfully: shape={img.shape}")
-        
-        # Use provided confidence or default
-        conf_threshold = confidence if confidence is not None else confidence_threshold
-        
-        print(f"[API] Running YOLO inference with confidence threshold: {conf_threshold}")
-        
-        # Run YOLO inference
-        results = model(img, conf=conf_threshold, verbose=False)
-        
-        print(f"[API] YOLO inference completed")
-        
-        # Parse results
+            raise HTTPException(status_code=400, detail="Could not decode image")
+
+        image_height, image_width = img.shape[:2]
+        results = model(img, conf=confidence, verbose=False)
+
         detections = []
         for result in results:
-            boxes = result.boxes
-            for box in boxes:
-                # Get box coordinates
+            for box in result.boxes:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                
-                # Get class and confidence
                 conf = float(box.conf[0].cpu().numpy())
-                class_id = int(box.cls[0].cpu().numpy())
-                raw_class_name = result.names[class_id] if hasattr(result, 'names') else f"Class {class_id}"
-                
-                # Normalize class name to ProductClass enum
-                normalized_class = normalize_class_name(raw_class_name)
-                class_name = normalized_class.value if normalized_class else raw_class_name
-                display_name = get_display_name(normalized_class) if normalized_class else raw_class_name
-                
-                detections.append({
-                    "class_id": class_id,
-                    "class_name": class_name,  # Normalized enum value
-                    "display_name": display_name,  # Human-readable name
-                    "raw_class_name": raw_class_name,  # Original from model
-                    "confidence": round(conf, 4),
-                    "bbox": {
-                        "x1": float(x1),
-                        "y1": float(y1),
-                        "x2": float(x2),
-                        "y2": float(y2)
-                    }
-                })
-        
-        print(f"[API] Returning {len(detections)} detections")
-        
+                cls_id = int(box.cls[0].cpu().numpy())
+                raw_class = result.names[cls_id]
+                normalized = normalize_class_name(raw_class)
+                display = get_display_name(normalized or raw_class)
+
+                bbox = {
+                    "x1": float(x1), "y1": float(y1),
+                    "x2": float(x2), "y2": float(y2)
+                }
+
+                # ── OCR + Logo detection on the detected product region ──
+                ocr_result = await extract_text_from_image_region(
+                    contents, bbox, image_width, image_height
+                )
+                ocr_text, detected_logo = ocr_result if ocr_result else (None, None)
+                product_info = parse_product_from_text(
+                    ocr_text or "", display or raw_class, detected_logo
+                )
+
+                detection = {
+                    "class_name": normalized or raw_class,
+                    "display_name": product_info.get("display_name") or display,
+                    "raw_class_name": raw_class,
+                    "confidence": round(conf, 3),
+                    "bbox": bbox,
+                    # Enriched brand info from OCR
+                    "brand": product_info.get("brand"),
+                    "product_name": product_info.get("product_name"),
+                    "shade": product_info.get("shade"),
+                    "ocr_text": ocr_text,
+                }
+                detections.append(detection)
+
         return {
             "status": "success",
             "detections": detections,
             "count": len(detections),
             "image_shape": {
-                "height": int(img.shape[0]),
-                "width": int(img.shape[1])
+                "width": image_width,
+                "height": image_height
             }
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[API] Detection error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Detection error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    
 
+@app.post("/detect-product-brand")
+async def detect_product_brand(
+    image: UploadFile = File(...),
+    x1: float = 0,
+    y1: float = 0,
+    x2: float = 0,
+    y2: float = 0,
+    product_class: str = "",
+    image_width: int = 0,
+    image_height: int = 0,
+):
+    """
+    Takes the full image + bounding box coordinates from /detect,
+    crops the product region, runs OCR, and returns enriched product info.
+    """
+    contents = await image.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty image file")
 
+    bbox = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+
+    raw_text = await extract_text_from_image_region(
+        contents, bbox, image_width, image_height
+    )
+
+    product_info = parse_product_from_text(raw_text or "", product_class)
+
+    return {
+        "status": "success",
+        "product_class": product_class,
+        "ocr_text": raw_text,
+        **product_info,
+    }
+    
 @app.post("/detect-with-image")
 async def detect_with_annotated_image(
     image: UploadFile = File(...),
