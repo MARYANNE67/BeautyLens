@@ -13,7 +13,9 @@ export interface Detection {
   id: string;
   label: string;
   displayName: string;
+  brand?: string;
   productName?: string;
+  shade?: string;
   productImageUrl?: string;
   boundingBox: BoundingBox;
   confidence: number;
