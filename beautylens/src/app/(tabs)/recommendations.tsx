@@ -26,6 +26,7 @@ import { SERIF } from '../../components/ProfileFields';
 import { AppConfig } from '../../config/featureFlags';
 import { getLatestSkinScan, getRecommendations, getScan } from '../../services/api';
 import { getLocalProfileId, getLocalScanId, setLocalScanId } from '../../utils/profileStorage';
+import { loadSavedShades, removeShade, saveShadeToCollection } from './collection';
 import type { ShadeCategory, ShadeRecommendation, RecommendationsResult, SkinScanStatus } from '../../types';
 
 const PINK = '#C2185B';
@@ -146,12 +147,16 @@ function RecommendationCard({
   item,
   rank,
   userDepth,
+  isSaved,
   onPreview,
+  onToggleSave,
 }: {
   item: ShadeRecommendation;
   rank: number;
   userDepth: string | null;
+  isSaved: boolean;
   onPreview: (item: ShadeRecommendation) => void;
+  onToggleSave: (item: ShadeRecommendation) => void;
 }) {
   const isHero = rank === 0;
   // The strongest concern gets surfaced on the card; the rest stay off it, so a
@@ -164,6 +169,14 @@ function RecommendationCard({
         <View style={[styles.labelBadge, isHero && styles.labelBadgeBest]}>
           <Text style={[styles.labelBadgeText, isHero && styles.labelBadgeTextBest]}>{item.label}</Text>
         </View>
+        <TouchableOpacity
+          style={styles.saveIconBtn}
+          onPress={() => onToggleSave(item)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={20} color={PINK} />
+        </TouchableOpacity>
       </View>
 
       {/* Only the product's own colour. The user's measured tone is shown on
@@ -279,6 +292,10 @@ export default function RecommendationsTabScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RecommendationsResult | null>(null);
+  // Maps a catalog shade_id to the internal id it was stored under in the
+  // Collection tab, so the bookmark toggle can tell saved from unsaved and
+  // remove the right record without re-reading storage on every tap.
+  const [savedShadeIds, setSavedShadeIds] = useState<Map<number, string>>(new Map());
 
   const load = useCallback(async (pId: number, sId: number, cat: ShadeCategory) => {
     setLoading(true);
@@ -355,11 +372,50 @@ export default function RecommendationsTabScreen() {
     }, [category])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      loadSavedShades().then((shades) => {
+        const map = new Map<number, string>();
+        for (const s of shades) {
+          if (s.sourceShadeId != null) map.set(s.sourceShadeId, s.id);
+        }
+        setSavedShadeIds(map);
+      });
+    }, [])
+  );
+
   const handlePreview = (item: ShadeRecommendation) => {
     router.push({
       pathname: '/shade-preview',
       params: { shadeId: String(item.shade_id), brand: item.brand, shadeName: item.shade_name },
     });
+  };
+
+  const handleToggleSave = async (item: ShadeRecommendation) => {
+    const existingId = savedShadeIds.get(item.shade_id);
+    if (existingId) {
+      await removeShade(existingId);
+      setSavedShadeIds((prev) => {
+        const next = new Map(prev);
+        next.delete(item.shade_id);
+        return next;
+      });
+      return;
+    }
+
+    await saveShadeToCollection({
+      brand: item.brand,
+      productName: item.product_line,
+      shade: item.shade_name,
+      undertone: item.undertone_category,
+      hexColor: item.swatch_hex,
+      sourceShadeId: item.shade_id,
+    });
+    const shades = await loadSavedShades();
+    const saved = shades.find((s) => s.sourceShadeId === item.shade_id);
+    if (saved) {
+      setSavedShadeIds((prev) => new Map(prev).set(item.shade_id, saved.id));
+    }
   };
 
   const hasScan = profileId != null && scanId != null;
@@ -495,7 +551,9 @@ export default function RecommendationsTabScreen() {
                   item={item}
                   rank={i}
                   userDepth={result.depth_category}
+                  isSaved={savedShadeIds.has(item.shade_id)}
                   onPreview={handlePreview}
+                  onToggleSave={handleToggleSave}
                 />
               ))}
 
@@ -592,7 +650,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardCompact: { paddingVertical: 16 },
-  cardTopRow: { flexDirection: 'row', marginBottom: 12 },
+  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  saveIconBtn: { padding: 2 },
   labelBadge: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, backgroundColor: '#F3EFF1' },
   labelBadgeBest: { backgroundColor: PINK_LIGHT },
   labelBadgeText: { fontSize: 13, fontWeight: '700', color: '#5C5158' },
