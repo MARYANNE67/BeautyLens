@@ -119,14 +119,30 @@ export const computeFaceShapeRatios = (landmarks: Landmark[]): FaceShapeRatios |
 };
 
 /**
- * Classifies a face shape from standard beauty-industry conventions:
+ * Classifies a face shape from a length-to-width ratio plus which of the
+ * three widths (forehead/cheekbone/jaw) dominate:
  *  - long: notably longer than wide
  *  - round: close to as wide as long, full/soft jaw near cheekbone width
  *  - square: forehead/cheek/jaw widths close together, minimal taper
  *  - heart: forehead notably wider than jaw, tapered chin
  *  - oval: balanced, moderate taper -- the fallback default
- * This is a heuristic, not a clinical measurement -- thresholds were chosen
- * to match commonly cited proportions, not derived from a labeled dataset.
+ *
+ * The general method -- classifying facial shape from length/width
+ * proportions -- is established craniofacial anthropometry (Farkas's
+ * facial index: https://www.qoves.com/insights/measurements/facial-index).
+ * Farkas's own index uses different reference points (nasion-to-gnathion
+ * over bizygomatic width, 3 broad categories) than the 5-shape oval/round/
+ * square/heart/long taxonomy used here, which is a popularized beauty-
+ * industry concept rather than a peer-reviewed classification. The
+ * `lengthToWidthRatio` cutoffs below (round/square below ~1.25, oval around
+ * 1.5, long/oblong above ~1.6) are aggregated from several independently
+ * published face-shape calculators that use the same hairline-to-chin /
+ * cheekbone-width measurement convention this module does, e.g.
+ * https://loopedinlooks.com/tools/face-shape-calculator/ -- not a single
+ * peer-reviewed source. The forehead-vs-jaw and forehead/jaw-vs-cheekbone
+ * thresholds are a looser heuristic: sources describe these qualitatively
+ * ("wide forehead over narrow jaw is heart", "square's forehead is almost
+ * as wide as the cheekbones and jawline") without an agreed-upon numeric cutoff.
  */
 export const classifyFaceShape = (landmarks: Landmark[]): FaceShape | null => {
   const ratios = computeFaceShapeRatios(landmarks);
@@ -136,7 +152,7 @@ export const classifyFaceShape = (landmarks: Landmark[]): FaceShape | null => {
 
   if (lengthToWidthRatio >= 1.6) return 'long';
   if (foreheadToJawRatio >= 1.15) return 'heart';
-  if (jawToCheekRatio >= 0.92 && foreheadToCheekRatio >= 0.92 && lengthToWidthRatio < 1.45) return 'square';
-  if (lengthToWidthRatio <= 1.15 && jawToCheekRatio >= 0.9) return 'round';
+  if (jawToCheekRatio >= 0.92 && foreheadToCheekRatio >= 0.92 && lengthToWidthRatio < 1.25) return 'square';
+  if (lengthToWidthRatio <= 1.25 && jawToCheekRatio >= 0.9) return 'round';
   return 'oval';
 };
