@@ -23,7 +23,6 @@ import {
 } from './meshOverlays';
 import {
   getNewFacialRegions,
-  classifyFaceShape,
   LEFT_CHEEKBONE_INDEX,
   RIGHT_CHEEKBONE_INDEX,
   type FaceShape,
@@ -304,23 +303,28 @@ function renderBronzerZones(
  * Renders a tutorial (placement) overlay for one of the 5 technique-driven
  * categories. Mirrors renderClassBasedMesh's dispatch shape in
  * meshOverlays.ts, but returns bands/markers/labels instead of color fills.
+ *
+ * `faceShape` is classified once per session by the caller (camera.tsx
+ * samples for a few seconds after the first detection, then locks it in)
+ * rather than being re-derived here on every call -- this function returns
+ * nothing until a shape has been learned.
  */
 export const renderTutorialZones = (
   productType: string | undefined,
   faceMeshData: FaceMeshResult,
-  scalingParams: ScalingParams
+  scalingParams: ScalingParams,
+  faceShape: FaceShape | null
 ): TutorialShape[] => {
   const { landmarks } = scalingParams;
-  if (!landmarks || landmarks.length === 0 || !isPlacementCategory(productType)) {
+  if (!landmarks || landmarks.length === 0 || !isPlacementCategory(productType) || !faceShape) {
     return [];
   }
 
-  const faceShape = classifyFaceShape(landmarks);
   const normalized = productType!.toLowerCase().trim();
 
   switch (normalized) {
     case 'contour':
-      return faceShape ? renderContourZones(landmarks, faceShape, scalingParams) : [];
+      return renderContourZones(landmarks, faceShape, scalingParams);
     case 'concealer':
       return renderConcealerZones(faceMeshData.facial_regions ?? null, landmarks, scalingParams);
     case 'highlighter':

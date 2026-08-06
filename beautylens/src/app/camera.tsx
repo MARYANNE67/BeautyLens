@@ -39,11 +39,39 @@ import {
   type MeshLabel,
 } from '../utils/meshOverlays';
 import { renderTutorialZones, isPlacementCategory } from '../utils/tutorialZones';
+import { classifyFaceShape, type FaceShape } from '../utils/faceGeometry';
 import type { FaceMeshResult, ImageShape } from '../types';
 
 const API_BASE_URL = __DEV__ ? AppConfig.API_BASE_URL_DEV : AppConfig.API_BASE_URL_PROD;
 const FACE_DETECTION_INTERVAL = 500;
 const FACE_CAPTURE_QUALITY = 0.45;
+// How long to keep sampling the face shape after a face is first detected,
+// before locking it in and stopping further classification for the session.
+const FACE_SHAPE_LEARNING_DURATION_MS = 5000;
+
+function mostFrequentFaceShape(samples: FaceShape[]): FaceShape {
+  const counts = new Map<FaceShape, number>();
+  for (const sample of samples) {
+    counts.set(sample, (counts.get(sample) ?? 0) + 1);
+  }
+  let best = samples[0];
+  let bestCount = 0;
+  for (const [shape, count] of counts) {
+    if (count > bestCount) {
+      best = shape;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+const FACE_SHAPE_LABEL: Record<FaceShape, string> = {
+  oval: 'Oval',
+  round: 'Round',
+  square: 'Square',
+  heart: 'Heart',
+  long: 'Long',
+};
 
 const buildClosedPath = (points: { x: number; y: number }[]) =>
   points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ') + ' Z';
@@ -191,6 +219,14 @@ export default function FaceCameraScreen() {
   const smoothedLandmarksRef = useRef<{ x: number; y: number; z: number }[] | null>(null);
   const SMOOTHING_FACTOR = 0.35; // lower = smoother but more lag, higher = snappier but shakier
 
+  // Face shape is learned once per session, not re-checked every tick: sample
+  // for FACE_SHAPE_LEARNING_DURATION_MS after the first detection, then lock
+  // in whichever shape was seen most and stop classifying for this screen.
+  const [detectedFaceShape, setDetectedFaceShape] = useState<FaceShape | null>(null);
+  const detectedFaceShapeRef = useRef<FaceShape | null>(null);
+  const faceShapeSamplesRef = useRef<FaceShape[]>([]);
+  const faceShapeLearningStartedAtRef = useRef<number | null>(null);
+
 
 
   const startFaceDetection = React.useCallback(() => {
@@ -216,6 +252,10 @@ export default function FaceCameraScreen() {
         }
         setFaceMeshData(null);
         setFaceDetected(false);
+        detectedFaceShapeRef.current = null;
+        setDetectedFaceShape(null);
+        faceShapeSamplesRef.current = [];
+        faceShapeLearningStartedAtRef.current = null;
       };
     }, [startFaceDetection])
   );
@@ -297,6 +337,10 @@ export default function FaceCameraScreen() {
     setFaceMeshData(null);
     persistentMeshDataRef.current = null;
     setFaceDetected(false);
+    detectedFaceShapeRef.current = null;
+    setDetectedFaceShape(null);
+    faceShapeSamplesRef.current = [];
+    faceShapeLearningStartedAtRef.current = null;
     startFaceDetection();
   };
 
@@ -368,6 +412,23 @@ export default function FaceCameraScreen() {
           setFaceMeshData(result);
           persistentMeshDataRef.current = result;
           setFaceDetected(true);
+
+          if (!detectedFaceShapeRef.current) {
+            if (faceShapeLearningStartedAtRef.current === null) {
+              faceShapeLearningStartedAtRef.current = Date.now();
+            }
+            const sampledShape = classifyFaceShape(result.landmarks);
+            if (sampledShape) {
+              faceShapeSamplesRef.current.push(sampledShape);
+            }
+
+            const elapsed = Date.now() - faceShapeLearningStartedAtRef.current;
+            if (elapsed >= FACE_SHAPE_LEARNING_DURATION_MS && faceShapeSamplesRef.current.length > 0) {
+              const lockedShape = mostFrequentFaceShape(faceShapeSamplesRef.current);
+              detectedFaceShapeRef.current = lockedShape;
+              setDetectedFaceShape(lockedShape);
+            }
+          }
         }
       } else {
         setFaceDetected(false);
@@ -448,7 +509,7 @@ export default function FaceCameraScreen() {
     } else {
       meshShapes = selectedProductTypes.flatMap((selectedType) =>
         isPlacementCategory(selectedType)
-          ? renderTutorialZones(selectedType, meshDataToUse, scalingParams)
+          ? renderTutorialZones(selectedType, meshDataToUse, scalingParams, detectedFaceShape)
           : renderClassBasedMesh(selectedType, meshDataToUse, scalingParams)
       );
     }
@@ -560,7 +621,7 @@ export default function FaceCameraScreen() {
             mirrorX: true,
           };
           return isPlacementCategory(type)
-            ? renderTutorialZones(type, meshDataToUse, captureScalingParams)
+            ? renderTutorialZones(type, meshDataToUse, captureScalingParams, detectedFaceShape)
             : renderClassBasedMesh(type, meshDataToUse, captureScalingParams);
         })
       : [];
@@ -644,6 +705,13 @@ export default function FaceCameraScreen() {
             {isDetecting && FeatureFlags.ENABLE_FACE_MESH && !persistentMeshDataRef.current && (
               <ActivityIndicator size="small" color="#fff" style={{ marginTop: 8 }} />
             )}
+            {FeatureFlags.ENABLE_FACE_MESH && selectedProductTypes.some(isPlacementCategory) && (detectedFaceShape || faceDetected) && (
+              <Text style={styles.faceShapeHint}>
+                {detectedFaceShape
+                  ? `Face shape: ${FACE_SHAPE_LABEL[detectedFaceShape]}`
+                  : 'Learning your face shape…'}
+              </Text>
+            )}
           </View>
 
           {FeatureFlags.ENABLE_FACE_MESH && renderFaceMesh()}
@@ -723,6 +791,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 15,
+  },
+  faceShapeHint: {
+    color: 'rgba(255, 255, 255, 0.65)',
+    fontSize: 11,
+    marginTop: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   controls: {
     flexDirection: 'row',
