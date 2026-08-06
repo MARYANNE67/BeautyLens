@@ -76,16 +76,16 @@ export const getDisplayName = (productClass: ProductClassName | string | null): 
 export const isValidClass = (className: string): boolean =>
   normalizeClassName(className) !== null;
 
-// Products that don't support virtual try-on
-export const NO_VIRTUAL_TRYON_PRODUCTS: ProductClassName[] = [
+// Products that don't support a tutorial (no color preview or placement guidance applies)
+export const NO_TUTORIAL_PRODUCTS: ProductClassName[] = [
   ProductClass.BRUSH,
   ProductClass.EYELASH_CURLER,
   ProductClass.BEAUTY_BLENDER,
   ProductClass.NAIL_POLISH,
 ];
 
-export const supportsVirtualTryOn = (className: string): boolean => {
+export const supportsTutorial = (className: string): boolean => {
   const normalized = normalizeClassName(className);
   if (!normalized) return false;
-  return !NO_VIRTUAL_TRYON_PRODUCTS.includes(normalized);
+  return !NO_TUTORIAL_PRODUCTS.includes(normalized);
 };

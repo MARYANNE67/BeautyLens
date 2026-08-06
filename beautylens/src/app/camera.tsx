@@ -23,7 +23,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Circle, Text as SvgText } from 'react-native-svg';
 import { detectFaceMesh } from '../services/api';
 import { AppConfig, FeatureFlags } from '../config/featureFlags';
 import { captureRef } from 'react-native-view-shot';
@@ -34,12 +34,106 @@ import {
   renderClassBasedMesh,
   type MeshShape,
   type MeshPolygon,
+  type MeshBand,
+  type MeshMarker,
+  type MeshLabel,
 } from '../utils/meshOverlays';
+import { renderTutorialZones, isPlacementCategory } from '../utils/tutorialZones';
 import type { FaceMeshResult, ImageShape } from '../types';
 
 const API_BASE_URL = __DEV__ ? AppConfig.API_BASE_URL_DEV : AppConfig.API_BASE_URL_PROD;
 const FACE_DETECTION_INTERVAL = 500;
 const FACE_CAPTURE_QUALITY = 0.45;
+
+const buildClosedPath = (points: { x: number; y: number }[]) =>
+  points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ') + ' Z';
+
+const buildOpenPath = (points: { x: number; y: number }[]) =>
+  points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
+
+/**
+ * Renders one mesh shape (color-fill polygon, tutorial band/marker/label) as
+ * an SVG element. Shared by the live overlay and the captured-photo review
+ * overlay so both stay visually consistent.
+ */
+function renderShapeElement(
+  shape: MeshShape,
+  key: string,
+  polygonStrokeWidth: number,
+  polygonDefaultStrokeOpacity: number
+): React.ReactNode {
+  switch (shape.type) {
+    case 'polygon': {
+      const polygon = shape as MeshPolygon;
+      if (!polygon.points || polygon.points.length < 3) return null;
+      const pathData = [
+        buildClosedPath(polygon.points),
+        ...(polygon.holes ?? []).map(buildClosedPath),
+      ].join(' ');
+      return (
+        <Path
+          key={key}
+          d={pathData}
+          fill={polygon.color || '#FF1493'}
+          fillRule={polygon.holes?.length ? 'evenodd' : 'nonzero'}
+          fillOpacity={polygon.opacity || 0.4}
+          stroke={polygon.color || '#FF1493'}
+          strokeWidth={polygonStrokeWidth}
+          strokeOpacity={polygon.strokeOpacity ?? polygonDefaultStrokeOpacity}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      );
+    }
+    case 'band': {
+      const band = shape as MeshBand;
+      if (!band.points || band.points.length < 2) return null;
+      return (
+        <Path
+          key={key}
+          d={buildOpenPath(band.points)}
+          fill="none"
+          stroke={band.color}
+          strokeWidth={band.strokeWidth}
+          strokeOpacity={band.opacity}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      );
+    }
+    case 'marker': {
+      const marker = shape as MeshMarker;
+      return (
+        <Circle
+          key={key}
+          cx={marker.x}
+          cy={marker.y}
+          r={marker.radius}
+          fill={marker.color}
+          fillOpacity={marker.opacity}
+        />
+      );
+    }
+    case 'label': {
+      const label = shape as MeshLabel;
+      return (
+        <SvgText
+          key={key}
+          x={label.x}
+          y={label.y}
+          fill={label.color}
+          fontSize={12}
+          fontWeight="bold"
+          textAnchor="middle"
+        >
+          {label.text}
+        </SvgText>
+      );
+    }
+    default:
+      return null;
+  }
+}
 
 export default function FaceCameraScreen() {
   const router = useRouter();
@@ -347,12 +441,15 @@ export default function FaceCameraScreen() {
     };
 
     let meshShapes: MeshShape[] = [];
+    const isDefaultMesh = FeatureFlags.ENABLE_DEFAULT_FACE_MESH;
 
-    if (FeatureFlags.ENABLE_DEFAULT_FACE_MESH) {
+    if (isDefaultMesh) {
       meshShapes = renderDefaultMesh(landmarks, scalingParams);
     } else {
       meshShapes = selectedProductTypes.flatMap((selectedType) =>
-        renderClassBasedMesh(selectedType, meshDataToUse, scalingParams)
+        isPlacementCategory(selectedType)
+          ? renderTutorialZones(selectedType, meshDataToUse, scalingParams)
+          : renderClassBasedMesh(selectedType, meshDataToUse, scalingParams)
       );
     }
 
@@ -360,51 +457,24 @@ export default function FaceCameraScreen() {
       return null;
     }
 
-    const isShapeBased = meshShapes.length > 0 && meshShapes[0].type === 'polygon';
-
-    if (isShapeBased) {
-      const polygons = meshShapes as MeshPolygon[];
+    if (!isDefaultMesh) {
       return (
         <View style={styles.meshOverlay} pointerEvents="none">
           <Svg style={StyleSheet.absoluteFill} width={viewWidth} height={viewHeight}>
-            {polygons.map((shape) => {
-              if (shape.type === 'polygon' && shape.points && shape.points.length >= 3) {
-                const buildClosedPath = (points: { x: number; y: number }[]) =>
-                  points
-                    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
-                    .join(' ') + ' Z';
-                const pathData = [
-                  buildClosedPath(shape.points),
-                  ...(shape.holes ?? []).map(buildClosedPath),
-                ].join(' ');
-
-                return (
-                  <Path
-                    key={`live-${shape.key}`}
-                    d={pathData}
-                    fill={shape.color || '#FF1493'}
-                    fillRule={shape.holes?.length ? 'evenodd' : 'nonzero'}
-                    fillOpacity={shape.opacity || 0.4}
-                    stroke={shape.color || '#FF1493'}
-                    strokeWidth={2}
-                    strokeOpacity={shape.strokeOpacity ?? 0.6}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                );
-              }
-              return null;
-            })}
+            {meshShapes.map((shape) => renderShapeElement(shape, `live-${shape.key}`, 2, 0.6))}
           </Svg>
         </View>
       );
     }
 
     // Fallback: point-based rendering for default mesh (468 landmark dots)
+    const points = meshShapes as MeshShape[] & { x: number; y: number; size?: number }[];
     return (
       <View style={styles.meshOverlay} pointerEvents="none">
-        {meshShapes.map((point) => {
-          if (point.type === 'polygon') return null;
+        {points.map((point) => {
+          if (point.type !== 'landmark' && point.type !== 'lip' && point.type !== 'eye' && point.type !== 'face') {
+            return null;
+          }
           return (
             <View
               key={point.key}
@@ -478,8 +548,8 @@ export default function FaceCameraScreen() {
     // Re-render overlay with correct scaling for the static photo
     const meshDataToUse = persistentMeshDataRef.current;
     const overlayShapes = meshDataToUse?.landmarks && selectedProductTypes.length > 0
-      ? selectedProductTypes.flatMap((type) =>
-          renderClassBasedMesh(type, meshDataToUse, {
+      ? selectedProductTypes.flatMap((type) => {
+          const captureScalingParams = {
             landmarks: meshDataToUse.landmarks,
             viewWidth: screenWidth,
             viewHeight: screenHeight,
@@ -488,8 +558,11 @@ export default function FaceCameraScreen() {
             offsetX,
             offsetY,
             mirrorX: true,
-          })
-        )
+          };
+          return isPlacementCategory(type)
+            ? renderTutorialZones(type, meshDataToUse, captureScalingParams)
+            : renderClassBasedMesh(type, meshDataToUse, captureScalingParams);
+        })
       : [];
 
     return (
@@ -513,26 +586,7 @@ export default function FaceCameraScreen() {
               height={screenHeight}
               pointerEvents="none"
             >
-            {overlayShapes.map((shape) => {
-              if (shape.type !== 'polygon') return null;
-              const poly = shape as MeshPolygon;
-              if (!poly.points?.length) return null;
-              const pathData =
-                poly.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z';
-              return (
-                <Path
-                  key={`snap-${poly.key}`}
-                  d={pathData}
-                  fill={poly.color}
-                  fillOpacity={poly.opacity}
-                  stroke={poly.color}
-                  strokeWidth={1.5}
-                  strokeOpacity={poly.strokeOpacity ?? 0.2}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
-              );
-            })}
+            {overlayShapes.map((shape) => renderShapeElement(shape, `snap-${shape.key}`, 1.5, 0.2))}
            </Svg>
           </View>
         </View>
@@ -573,7 +627,7 @@ export default function FaceCameraScreen() {
             <Text style={styles.productName} numberOfLines={1}>
               {selectedProductTypes.length > 1
                 ? `${selectedProductTypes.length} product look`
-                : productName || productType || 'Virtual Try-On'}
+                : productName || productType || 'Tutorial'}
             </Text>
             {selectedProductNames.length > 1 && (
               <Text style={styles.lookProducts} numberOfLines={1}>

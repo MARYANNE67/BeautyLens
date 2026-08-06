@@ -41,7 +41,44 @@ export interface MeshPolygon {
   region: string;
 }
 
-export type MeshShape = MeshPoint | MeshPolygon;
+/** An open, unfilled stroked line along a sequence of points — used by the
+ * tutorial-zone renderers (utils/tutorialZones.ts) to trace a placement line
+ * (e.g. along the jaw or the hollow of the cheek) rather than fill a region. */
+export interface MeshBand {
+  key: string;
+  type: 'band';
+  points: { x: number; y: number }[];
+  color: string;
+  opacity: number;
+  strokeWidth: number;
+  region: string;
+}
+
+/** A small filled circle marking a single application point (e.g. top of
+ * cheekbone for highlighter) — used by utils/tutorialZones.ts. */
+export interface MeshMarker {
+  key: string;
+  type: 'marker';
+  x: number;
+  y: number;
+  radius: number;
+  color: string;
+  opacity: number;
+  region: string;
+}
+
+/** A standalone text callout, anchored near a band/marker — used by
+ * utils/tutorialZones.ts to name the zone (e.g. "Contour"). */
+export interface MeshLabel {
+  key: string;
+  type: 'label';
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+}
+
+export type MeshShape = MeshPoint | MeshPolygon | MeshBand | MeshMarker | MeshLabel;
 
 /**
  * Get facial regions from face mesh data
@@ -57,7 +94,7 @@ export const getFacialRegions = (faceMeshData: FaceMeshResult | null): FacialReg
  * Scale a single landmark/point from photo space to view space,
  * applying the letterbox/pillarbox offset and front-camera mirroring.
  */
-function scalePoint(
+export function scalePoint(
   point: { x: number; y: number },
   scaleX: number,
   scaleY: number,

@@ -38,7 +38,7 @@ const EXPECT_ITEMS: { icon: IoniconName; text: string }[] = [
   { icon: 'camera-outline',       text: 'Capture and save your favourite looks' },
 ];
 
-export default function VirtualTryOnScreen() {
+export default function TutorialScreen() {
   const router = useRouter();
   const { productType, productName, productImageUrl, brand, shade, productTypes, productNames } = useLocalSearchParams<{
     productType?: string;
@@ -73,7 +73,7 @@ export default function VirtualTryOnScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={26} color="#1A1A1A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Virtual Try-On</Text>
+        <Text style={styles.headerTitle}>Tutorial</Text>
         <View style={{ width: 42 }} />
       </View>
 
@@ -138,7 +138,7 @@ export default function VirtualTryOnScreen() {
           activeOpacity={0.85}
         >
           <Ionicons name="camera" size={20} color="#fff" />
-          <Text style={styles.startBtnText}>Start Try-On</Text>
+          <Text style={styles.startBtnText}>Start Tutorial</Text>
         </TouchableOpacity>
 
         {/* ── What to expect ── */}

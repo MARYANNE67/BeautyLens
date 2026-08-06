@@ -29,12 +29,12 @@ const API_BASE_URL = __DEV__
 const DETECTION_CONFIDENCE_THRESHOLD = AppConfig.DETECTION_CONFIDENCE_THRESHOLD;
 const DETECTION_INTERVAL = AppConfig.DETECTION_INTERVAL;
 const USE_MOCK_DETECTIONS = FeatureFlags.USE_MOCK_DETECTIONS;
-const NO_VIRTUAL_TRYON = ['brush', 'eyelash curler', 'beauty blender'];
+const NO_TUTORIAL_SUPPORT = ['brush', 'eyelash curler', 'beauty blender'];
 
-const getTryOnType = (product: Detection) => normalizeClassName(product.label) ?? product.label;
+const getTutorialType = (product: Detection) => normalizeClassName(product.label) ?? product.label;
 
-const supportsVirtualTryOn = (productType: string) =>
-  !NO_VIRTUAL_TRYON.includes(productType.toLowerCase());
+const supportsTutorial = (productType: string) =>
+  !NO_TUTORIAL_SUPPORT.includes(productType.toLowerCase());
 
 const transformDetection = (
   apiDetection: ApiDetection,
@@ -140,8 +140,8 @@ export default function ScanProductScreen() {
           const supportedTypes: string[] = Array.from(
             new Set(
               transformed
-                .map(getTryOnType)
-                .filter((type: string) => supportsVirtualTryOn(type))
+                .map(getTutorialType)
+                .filter((type: string) => supportsTutorial(type))
             )
           );
 
@@ -230,9 +230,9 @@ export default function ScanProductScreen() {
   }, [isDetecting]);
 
   const handleTryVirtualLook = (product: Detection) => {
-    const normalized = getTryOnType(product);
+    const normalized = getTutorialType(product);
     router.push({
-      pathname: '/tryon',
+      pathname: '/tutorial',
       params: {
         productType: normalized,
         productName: product.productName ?? product.displayName ?? product.label,
@@ -241,10 +241,10 @@ export default function ScanProductScreen() {
     });
   };
 
-  const uniqueTryOnProducts = detections.reduce<Detection[]>((products, detection) => {
-    const type = getTryOnType(detection);
-    if (!supportsVirtualTryOn(type)) return products;
-    if (products.some((product) => getTryOnType(product) === type)) return products;
+  const uniqueTutorialProducts = detections.reduce<Detection[]>((products, detection) => {
+    const type = getTutorialType(detection);
+    if (!supportsTutorial(type)) return products;
+    if (products.some((product) => getTutorialType(product) === type)) return products;
     return [...products, detection];
   }, []);
 
@@ -257,22 +257,22 @@ export default function ScanProductScreen() {
   };
 
   const handleTrySelectedLook = () => {
-    const selectedProducts = uniqueTryOnProducts.filter((product) =>
-      selectedLookTypes.includes(getTryOnType(product))
+    const selectedProducts = uniqueTutorialProducts.filter((product) =>
+      selectedLookTypes.includes(getTutorialType(product))
     );
 
     if (selectedProducts.length === 0) return;
 
     router.push({
-      pathname: '/tryon',
+      pathname: '/tutorial',
       params: {
-        productType: getTryOnType(selectedProducts[0]),
+        productType: getTutorialType(selectedProducts[0]),
         productName:
           selectedProducts.length === 1
             ? selectedProducts[0].productName ?? selectedProducts[0].displayName ?? selectedProducts[0].label
             : `${selectedProducts.length} product look`,
         productImageUrl: selectedProducts[0].productImageUrl ?? '',
-        productTypes: JSON.stringify(selectedProducts.map(getTryOnType)),
+        productTypes: JSON.stringify(selectedProducts.map(getTutorialType)),
         productNames: JSON.stringify(
           selectedProducts.map((product) => product.productName ?? product.displayName ?? product.label)
         ),
@@ -416,15 +416,15 @@ export default function ScanProductScreen() {
         </TouchableOpacity>
       </View>
 
-      {uniqueTryOnProducts.length > 1 && !selectedProduct && (
+      {uniqueTutorialProducts.length > 1 && !selectedProduct && (
         <View style={styles.lookTray}>
           <View style={styles.lookHeader}>
             <Text style={styles.lookTitle}>Try selected look</Text>
-            <Text style={styles.lookCount}>{selectedLookTypes.length}/{uniqueTryOnProducts.length}</Text>
+            <Text style={styles.lookCount}>{selectedLookTypes.length}/{uniqueTutorialProducts.length}</Text>
           </View>
           <View style={styles.lookChips}>
-            {uniqueTryOnProducts.map((product) => {
-              const productType = getTryOnType(product);
+            {uniqueTutorialProducts.map((product) => {
+              const productType = getTutorialType(product);
               const isSelected = selectedLookTypes.includes(productType);
               return (
                 <TouchableOpacity
