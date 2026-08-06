@@ -55,6 +55,21 @@ const FACE_BOTTOM_INDEX = 152;
 const LEFT_JAW_WIDTH_INDEX = 172;
 const RIGHT_JAW_WIDTH_INDEX = 397;
 
+// Single-point anchors used by the placement rules table in tutorialZones.ts.
+// FOREHEAD_CENTER/CHIN_TIP/LEFT_TEMPLE/RIGHT_TEMPLE/LEFT_CHEEKBONE/
+// RIGHT_CHEEKBONE (above) are already validated via face_oval_indices. The
+// ones below are additional single canonical MediaPipe indices commonly
+// cited for these features -- moderate confidence like the region groups
+// above, not yet visually verified against a real face in this codebase.
+export const CUPIDS_BOW_INDEX = 0; // already in outer_lip_indices
+export const FOREHEAD_CENTER_INDEX = FACE_TOP_INDEX; // 10
+export const CHIN_TIP_INDEX = FACE_BOTTOM_INDEX; // 152
+export const LEFT_MOUTH_CORNER_INDEX = 61; // already in outer_lip_indices
+export const RIGHT_MOUTH_CORNER_INDEX = 291; // already in outer_lip_indices
+export const NOSE_BRIDGE_INDEX = 6; // commonly-cited MediaPipe nose-bridge point
+export const LEFT_JAW_CORNER_INDEX = 58; // already in JAWLINE_INDICES
+export const RIGHT_JAW_CORNER_INDEX = 288; // already in JAWLINE_INDICES
+
 export interface NewFacialRegions {
   jawline: Landmark[];
   chin: Landmark[];
