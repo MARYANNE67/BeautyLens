@@ -105,7 +105,7 @@ ultralytics==8.4.104
 ultralytics-thop==2.0.20
 uritemplate==4.2.0
 urllib3==2.7.0
-uvicorn==0.51.0
+uvicorn==0.52.1
 uvloop==0.22.1
 watchfiles==1.2.0
 websockets==16.1.1
