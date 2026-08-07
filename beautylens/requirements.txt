@@ -63,7 +63,7 @@ pi_heif==1.4.0
 pillow==12.3.0
 pillow-avif-plugin==1.6.0
 pluggy==1.6.0
-polars==1.43.0
+polars==1.43.2
 polars-runtime-32==1.43.0
 proto-plus==1.27.1
 protobuf==3.20.3
