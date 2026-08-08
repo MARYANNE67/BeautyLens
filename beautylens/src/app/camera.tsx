@@ -18,14 +18,17 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
-  Image
+  Image,
+  ScrollView
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import Svg, { Path, Circle, Text as SvgText } from 'react-native-svg';
-import { detectFaceMesh } from '../services/api';
-import { AppConfig, FeatureFlags } from '../config/featureFlags';
+import { detectFaceMesh, detectHairline } from '../services/api';
+import { AppConfig } from '../config/featureFlags';
+import { FeatureFlags } from '../config/flags';
 import { captureRef } from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library';
 import * as Linking from 'expo-linking';
@@ -38,13 +41,30 @@ import {
   type MeshMarker,
   type MeshLabel,
 } from '../utils/meshOverlays';
-import { renderTutorialZones, isPlacementCategory } from '../utils/tutorialZones';
-import { classifyFaceShape, type FaceShape } from '../utils/faceGeometry';
+import { renderTutorialZones, isPlacementCategory, type HairlinePoints } from '../utils/tutorialZones';
+import {
+  classifyFaceShape,
+  type FaceShape,
+  LEFT_TEMPLE_INDEX,
+  RIGHT_TEMPLE_INDEX,
+  FOREHEAD_CENTER_INDEX,
+} from '../utils/faceGeometry';
 import type { FaceMeshResult, ImageShape } from '../types';
 
 const API_BASE_URL = __DEV__ ? AppConfig.API_BASE_URL_DEV : AppConfig.API_BASE_URL_PROD;
-const FACE_DETECTION_INTERVAL = 500;
+const FACE_DETECTION_INTERVAL = 250;
 const FACE_CAPTURE_QUALITY = 0.45;
+// takePictureAsync's `quality` only controls JPEG compression, not pixel
+// dimensions -- without this, every polling tick uploads a full-sensor-
+// resolution photo (e.g. 3000px+) over the network for face-mesh detection,
+// which doesn't need anywhere near that resolution to find landmarks. This
+// is very likely the dominant cost in the detect-face-mesh round trip
+// (upload time + backend decode/inference time both scale with image size),
+// well above the polling interval itself. Downscaling the long edge to this
+// many pixels before upload is unverified against a live device, but is the
+// standard fix for this exact "server round-trip is too slow" shape of
+// problem.
+const FACE_DETECTION_MAX_DIMENSION = 480;
 // How long to keep sampling the face shape after a face is first detected,
 // before locking it in and stopping further classification for the session.
 const FACE_SHAPE_LEARNING_DURATION_MS = 5000;
@@ -72,6 +92,17 @@ const FACE_SHAPE_LABEL: Record<FaceShape, string> = {
   heart: 'Heart',
   long: 'Long',
 };
+
+// Shown as a bottom chip bar when the screen is reached with no product info
+// at all (the "Tutorial" shortcut on the scan screen) -- lets you toggle
+// which placement categories' zones are drawn, live, without leaving the camera.
+const PLACEMENT_CATEGORY_CHIPS: { key: string; label: string }[] = [
+  { key: 'contour', label: 'Contour' },
+  { key: 'concealer', label: 'Concealer' },
+  { key: 'highlighter', label: 'Highlighter' },
+  { key: 'blush', label: 'Blush' },
+  { key: 'bronzer', label: 'Bronzer' },
+];
 
 const buildClosedPath = (points: { x: number; y: number }[]) =>
   points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ') + ' Z';
@@ -195,6 +226,27 @@ export default function FaceCameraScreen() {
     }
   }, [productNames]);
 
+  // Reached with no product info at all (the scan screen's "Tutorial"
+  // shortcut) -- selectedProductTypes is already [] in that case, per the
+  // memo above. Category selection then comes from the bottom chip bar
+  // instead of route params, and can change live without re-navigating.
+  const isCategoryPickerMode = selectedProductTypes.length === 0;
+  const [activeCategories, setActiveCategories] = useState<string[]>([]);
+  const displayProductTypes = isCategoryPickerMode ? activeCategories : selectedProductTypes;
+
+  const toggleCategory = (categoryKey: string) => {
+    setActiveCategories((current) =>
+      current.includes(categoryKey)
+        ? current.filter((k) => k !== categoryKey)
+        : [...current, categoryKey]
+    );
+  };
+  const allCategoryKeys = PLACEMENT_CATEGORY_CHIPS.map((c) => c.key);
+  const allCategoriesSelected = allCategoryKeys.every((k) => activeCategories.includes(k));
+  const toggleAllCategories = () => {
+    setActiveCategories(allCategoriesSelected ? [] : allCategoryKeys);
+  };
+
   const [permission, requestPermission] = useCameraPermissions();
   const cameraType = 'front' as const;
   const [faceMeshData, setFaceMeshData] = useState<FaceMeshResult | null>(null);
@@ -217,7 +269,7 @@ export default function FaceCameraScreen() {
   const persistentMeshDataRef = useRef<FaceMeshResult | null>(null);
   const isDetectingRef = useRef(false);
   const smoothedLandmarksRef = useRef<{ x: number; y: number; z: number }[] | null>(null);
-  const SMOOTHING_FACTOR = 0.35; // lower = smoother but more lag, higher = snappier but shakier
+  const SMOOTHING_FACTOR = 0.6; // lower = smoother but more lag, higher = snappier but shakier
 
   // Face shape is learned once per session, not re-checked every tick: sample
   // for FACE_SHAPE_LEARNING_DURATION_MS after the first detection, then lock
@@ -226,6 +278,13 @@ export default function FaceCameraScreen() {
   const detectedFaceShapeRef = useRef<FaceShape | null>(null);
   const faceShapeSamplesRef = useRef<FaceShape[]>([]);
   const faceShapeLearningStartedAtRef = useRef<number | null>(null);
+
+  // Real hairline (hair/skin boundary), fetched once on the first successful
+  // detection and never again -- face-mesh landmarks don't model hair at
+  // all, so this is a supplement, not a per-tick replacement. Falls back to
+  // the landmark-approximated hairline in tutorialZones.ts when null.
+  const [detectedHairline, setDetectedHairline] = useState<HairlinePoints | null>(null);
+  const hairlineFetchTriggeredRef = useRef(false);
 
 
 
@@ -256,6 +315,8 @@ export default function FaceCameraScreen() {
         setDetectedFaceShape(null);
         faceShapeSamplesRef.current = [];
         faceShapeLearningStartedAtRef.current = null;
+        hairlineFetchTriggeredRef.current = false;
+        setDetectedHairline(null);
       };
     }, [startFaceDetection])
   );
@@ -341,6 +402,8 @@ export default function FaceCameraScreen() {
     setDetectedFaceShape(null);
     faceShapeSamplesRef.current = [];
     faceShapeLearningStartedAtRef.current = null;
+    hairlineFetchTriggeredRef.current = false;
+    setDetectedHairline(null);
     startFaceDetection();
   };
 
@@ -364,11 +427,23 @@ export default function FaceCameraScreen() {
         return;
       }
 
-      if (photo.width && photo.height) {
-        setPhotoDimensions({ width: photo.width, height: photo.height });
+      // Downscale before upload -- see FACE_DETECTION_MAX_DIMENSION above.
+      // Only the longer edge is constrained; ImageManipulator preserves
+      // aspect ratio when only one dimension is given.
+      const isLandscape = photo.width >= photo.height;
+      const detectionPhoto = await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [isLandscape
+          ? { resize: { width: FACE_DETECTION_MAX_DIMENSION } }
+          : { resize: { height: FACE_DETECTION_MAX_DIMENSION } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      if (detectionPhoto.width && detectionPhoto.height) {
+        setPhotoDimensions({ width: detectionPhoto.width, height: detectionPhoto.height });
       }
 
-      const result = await detectFaceMesh(API_BASE_URL, photo.uri, false);
+      const result = await detectFaceMesh(API_BASE_URL, detectionPhoto.uri, false);
 
       if (result.status === 'error') {
         console.log('[Face Detection] API returned error:', result.message);
@@ -389,7 +464,7 @@ export default function FaceCameraScreen() {
         // }
 
         if (result.face_detected && result.landmarks && result.landmarks.length > 0) {
-          const imgDims = result.image_dimensions || { width: photo.width, height: photo.height };
+          const imgDims = result.image_dimensions || { width: detectionPhoto.width, height: detectionPhoto.height };
           setPhotoDimensions(imgDims);
 
           // Smooth landmarks — blend new positions with previous to reduce shakiness
@@ -428,6 +503,29 @@ export default function FaceCameraScreen() {
               detectedFaceShapeRef.current = lockedShape;
               setDetectedFaceShape(lockedShape);
             }
+          }
+
+          if (!hairlineFetchTriggeredRef.current) {
+            hairlineFetchTriggeredRef.current = true;
+            const xPositions = [
+              LEFT_TEMPLE_INDEX,
+              FOREHEAD_CENTER_INDEX,
+              RIGHT_TEMPLE_INDEX,
+            ].map((i) => result.landmarks[i]?.x ?? 0);
+
+            // Fire-and-forget: this is a one-time-per-session lookup, not
+            // part of the regular detection loop, so it shouldn't block or
+            // slow down the polling tick that triggered it.
+            detectHairline(API_BASE_URL, detectionPhoto.uri, xPositions)
+              .then((hairlineResult) => {
+                if (hairlineResult.status !== 'success') return;
+                const [left, center, right] = hairlineResult.points;
+                setDetectedHairline({ left, center, right });
+              })
+              .catch(() => {
+                // Leave detectedHairline null -- tutorialZones.ts already
+                // falls back to the landmark approximation for that case.
+              });
           }
         }
       } else {
@@ -477,14 +575,21 @@ export default function FaceCameraScreen() {
     const isFrontCamera = cameraType === 'front';
     const mirrorX = isFrontCamera;
 
-    // Letterbox/pillarbox aware scaling — matches how CameraView fills the view
-    if (viewAspectRatio > imgAspectRatio) {
-      // View wider than image — scale to fill height, pillarbox on sides
+    // Cover-fit scaling — CameraView fills its container by cropping the
+    // overflow (like every native camera preview), not by letterboxing with
+    // blank bars. This must pick the LARGER of the two fill ratios so the
+    // scaled image fully covers the view on both axes; the captured-photo
+    // review below (Image resizeMode="cover") already does this correctly --
+    // this block previously had the comparison backwards (contain instead of
+    // cover), which is correct near the center of the face but increasingly
+    // wrong toward the edges (worse toward the chin/hairline).
+    if (imgAspectRatio > viewAspectRatio) {
+      // Image relatively wider than the view — match height, crop left/right
       scaleY = viewHeight / imgHeight;
       scaleX = scaleY;
       offsetX = (viewWidth - imgWidth * scaleX) / 2;
     } else {
-      // View taller than image — scale to fill width, letterbox top/bottom
+      // Image relatively taller than the view — match width, crop top/bottom
       scaleX = viewWidth / imgWidth;
       scaleY = scaleX;
       offsetY = (viewHeight - imgHeight * scaleY) / 2;
@@ -507,9 +612,9 @@ export default function FaceCameraScreen() {
     if (isDefaultMesh) {
       meshShapes = renderDefaultMesh(landmarks, scalingParams);
     } else {
-      meshShapes = selectedProductTypes.flatMap((selectedType) =>
+      meshShapes = displayProductTypes.flatMap((selectedType) =>
         isPlacementCategory(selectedType)
-          ? renderTutorialZones(selectedType, meshDataToUse, scalingParams, detectedFaceShape)
+          ? renderTutorialZones(selectedType, meshDataToUse, scalingParams, detectedFaceShape, detectedHairline)
           : renderClassBasedMesh(selectedType, meshDataToUse, scalingParams)
       );
     }
@@ -608,8 +713,8 @@ export default function FaceCameraScreen() {
 
     // Re-render overlay with correct scaling for the static photo
     const meshDataToUse = persistentMeshDataRef.current;
-    const overlayShapes = meshDataToUse?.landmarks && selectedProductTypes.length > 0
-      ? selectedProductTypes.flatMap((type) => {
+    const overlayShapes = meshDataToUse?.landmarks && displayProductTypes.length > 0
+      ? displayProductTypes.flatMap((type) => {
           const captureScalingParams = {
             landmarks: meshDataToUse.landmarks,
             viewWidth: screenWidth,
@@ -621,7 +726,7 @@ export default function FaceCameraScreen() {
             mirrorX: true,
           };
           return isPlacementCategory(type)
-            ? renderTutorialZones(type, meshDataToUse, captureScalingParams, detectedFaceShape)
+            ? renderTutorialZones(type, meshDataToUse, captureScalingParams, detectedFaceShape, detectedHairline)
             : renderClassBasedMesh(type, meshDataToUse, captureScalingParams);
         })
       : [];
@@ -686,7 +791,13 @@ export default function FaceCameraScreen() {
         <View style={styles.cameraOverlay} pointerEvents="box-none">
           <View style={styles.productInfoOverlay} pointerEvents="none">
             <Text style={styles.productName} numberOfLines={1}>
-              {selectedProductTypes.length > 1
+              {isCategoryPickerMode
+                ? activeCategories.length === 0
+                  ? 'Choose a category below'
+                  : activeCategories.length === 1
+                  ? PLACEMENT_CATEGORY_CHIPS.find((c) => c.key === activeCategories[0])?.label ?? activeCategories[0]
+                  : `${activeCategories.length} categories`
+                : selectedProductTypes.length > 1
                 ? `${selectedProductTypes.length} product look`
                 : productName || productType || 'Tutorial'}
             </Text>
@@ -705,7 +816,7 @@ export default function FaceCameraScreen() {
             {isDetecting && FeatureFlags.ENABLE_FACE_MESH && !persistentMeshDataRef.current && (
               <ActivityIndicator size="small" color="#fff" style={{ marginTop: 8 }} />
             )}
-            {FeatureFlags.ENABLE_FACE_MESH && selectedProductTypes.some(isPlacementCategory) && (detectedFaceShape || faceDetected) && (
+            {FeatureFlags.ENABLE_FACE_MESH && displayProductTypes.some(isPlacementCategory) && (detectedFaceShape || faceDetected) && (
               <Text style={styles.faceShapeHint}>
                 {detectedFaceShape
                   ? `Face shape: ${FACE_SHAPE_LABEL[detectedFaceShape]}`
@@ -722,6 +833,41 @@ export default function FaceCameraScreen() {
             </View>
           )}
         </View>
+
+        {isCategoryPickerMode && (
+          <View style={styles.categoryChipBar}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryChipBarContent}
+            >
+              <TouchableOpacity
+                style={[styles.categoryChip, allCategoriesSelected && styles.categoryChipSelected]}
+                onPress={toggleAllCategories}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.categoryChipText, allCategoriesSelected && styles.categoryChipTextSelected]}>
+                  All
+                </Text>
+              </TouchableOpacity>
+              {PLACEMENT_CATEGORY_CHIPS.map((category) => {
+                const isSelected = activeCategories.includes(category.key);
+                return (
+                  <TouchableOpacity
+                    key={category.key}
+                    style={[styles.categoryChip, isSelected && styles.categoryChipSelected]}
+                    onPress={() => toggleCategory(category.key)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.categoryChipText, isSelected && styles.categoryChipTextSelected]}>
+                      {category.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         <View style={styles.controls}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -801,6 +947,28 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 10,
   },
+  categoryChipBar: {
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingVertical: 10,
+  },
+  categoryChipBarContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  categoryChip: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  categoryChipSelected: {
+    borderColor: '#C2185B',
+    backgroundColor: 'rgba(194,24,91,0.4)',
+  },
+  categoryChipText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  categoryChipTextSelected: { color: '#fff' },
   controls: {
     flexDirection: 'row',
     justifyContent: 'space-around',

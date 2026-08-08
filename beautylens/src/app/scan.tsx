@@ -17,7 +17,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { detectProducts, getHealthStatus } from '../services/api';
 import ProductCard from '../components/ProductCard';
 import { normalizeClassName, getDisplayName } from '../utils/productClasses';
-import { FeatureFlags, simulateMockDetection, AppConfig } from '../config/featureFlags';
+import { simulateMockDetection, AppConfig } from '../config/featureFlags';
+import { FeatureFlags } from '../config/flags';
 import type { Detection, ApiDetection, ImageShape, ApiStatus } from '../types';
 
 const PINK = '#C2185B';
@@ -351,6 +352,14 @@ export default function ScanProductScreen() {
             <Text style={styles.backButtonText}>Back</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={styles.tutorialShortcutButton}
+            onPress={() => router.push({ pathname: '/camera', params: {} })}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.backButtonText}>Tutorial</Text>
+          </TouchableOpacity>
+
           {!selectedProduct && (
             <View style={styles.helperTextContainer}>
               <Text style={styles.helperText}>
@@ -482,6 +491,16 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   backButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  tutorialShortcutButton: {
+    position: 'absolute',
+    top: 18,
+    right: 16,
+    zIndex: 20,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
   helperTextContainer: { position: 'absolute', bottom: 120, left: 0, right: 0, alignItems: 'center', paddingHorizontal: 20 },
   helperText: { color: '#fff', fontSize: 15, fontWeight: '600', textAlign: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, overflow: 'hidden' },
   boundingBox: { position: 'absolute', backgroundColor: 'transparent' },

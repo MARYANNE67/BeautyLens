@@ -316,7 +316,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
-
   /* What to expect */
   section: {
     backgroundColor: '#fff',
