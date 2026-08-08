@@ -8,6 +8,7 @@ import type {
   AuthSession,
   DetectionResult,
   FaceMeshResult,
+  HairlineResult,
   HealthStatus,
   BeautyProfile,
   BeautyProfileInput,
@@ -449,6 +450,50 @@ export const detectFaceMesh = async (
       face_detected: false,
       landmarks: [],
       num_landmarks: 0,
+      message: (error as Error).message || 'Network error',
+    };
+  }
+};
+
+/**
+ * Detects the real hair/skin boundary at a few x positions -- a supplement
+ * to face-mesh landmarks, which don't model hair at all. Intended to be
+ * called once per camera session (see camera.tsx), not per detection tick.
+ */
+export const detectHairline = async (
+  baseUrl: string,
+  imageUri: string,
+  xPositions: number[]
+): Promise<HairlineResult> => {
+  try {
+    const formData = new FormData();
+    const filename = imageUri.split('/').pop() || 'photo.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+    formData.append('image', { uri: imageUri, type, name: filename } as any);
+
+    const response = await fetch(
+      `${baseUrl}/detect-hairline?x_positions=${encodeURIComponent(JSON.stringify(xPositions))}`,
+      { method: 'POST', body: formData }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.log('[Hairline API] Error response:', (errorData as any).detail);
+      return {
+        status: 'error',
+        points: xPositions.map(() => null),
+        message: (errorData as any).detail || `HTTP error! status: ${response.status}`,
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.log('[Hairline API] Network error:', (error as Error).message);
+    return {
+      status: 'error',
+      points: xPositions.map(() => null),
       message: (error as Error).message || 'Network error',
     };
   }

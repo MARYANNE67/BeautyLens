@@ -97,6 +97,18 @@ export interface FaceMeshResult {
   message?: string;
 }
 
+/**
+ * Matches POST /detect-hairline response. One point per requested x
+ * position (in the same order), or null where no clean hair->skin
+ * transition was found in that column (hat, hair fully covering the
+ * forehead, low-confidence segmentation) -- see src/api/hair_segmentation.py.
+ */
+export interface HairlineResult {
+  status: string;
+  points: (Pick<Landmark, 'x' | 'y'> | null)[];
+  message?: string;
+}
+
 export interface HealthStatus {
   status: string;
   model_loaded: boolean;

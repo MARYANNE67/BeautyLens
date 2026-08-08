@@ -64,6 +64,7 @@ __pycache__/
 
 # ML models
 models/final/*.pt
+models/hair_segmenter.tflite
 
 # App database (recreated from data/shade_catalog_seed.json on startup)
 *.db

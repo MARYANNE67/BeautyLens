@@ -40,11 +40,22 @@ except ImportError as e:
     def get_face_mesh_detector():
         raise ImportError("MediaPipe is not installed. Run: pip install mediapipe")
 
+# Import hair segmenter (optional - only if MediaPipe Tasks API + model file are available)
+try:
+    from src.api.hair_segmentation import get_hair_segmenter
+    HAIR_SEGMENTATION_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Hair segmentation not available. MediaPipe Tasks API may not be installed: {e}")
+    HAIR_SEGMENTATION_AVAILABLE = False
+    def get_hair_segmenter(path: str):
+        raise ImportError("MediaPipe is not installed. Run: pip install mediapipe")
+
 # Global model variable
 model: Optional[YOLO] = None
 model_path: Optional[str] = None
 confidence_threshold: float = 0.25
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
+HAIR_MODEL_PATH = os.getenv("HAIR_MODEL_PATH", "models/hair_segmenter.tflite")
 
 
 def load_model(path: str):
@@ -595,6 +606,74 @@ async def detect_face_mesh(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Face mesh detection error: {str(e)}")
+
+
+@app.post("/detect-hairline")
+async def detect_hairline(
+    image: UploadFile = File(...),
+    x_positions: str = "[]",
+):
+    """
+    Detect the real hairline (hair/skin boundary) at a few client-specified
+    x positions using MediaPipe hair segmentation -- a supplement to face-mesh
+    landmarks, which don't model hair at all. Intended to be called once per
+    camera session on the client (see camera.tsx), not per detection tick:
+    this model costs meaningfully more CPU than face mesh alone.
+
+    Args:
+        image: Image file (JPEG, PNG, etc.) -- typically the same frame just
+            sent to /detect-face-mesh.
+        x_positions: JSON array of pixel x-coordinates to sample, in the same
+            pixel space as the image (e.g. the x of already-detected
+            left-temple/forehead-center/right-temple landmarks).
+
+    Returns:
+        JSON with one point per x_positions entry (or null if no clean
+        hair->skin transition was found in that column).
+    """
+    if not HAIR_SEGMENTATION_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Hair segmentation is not available. Please install MediaPipe: pip install mediapipe"
+        )
+    if not os.path.exists(HAIR_MODEL_PATH):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Hair segmentation model not found at {HAIR_MODEL_PATH}. See .env.example for the download step."
+        )
+
+    try:
+        import json
+        try:
+            x_pixels = json.loads(x_positions)
+            if not isinstance(x_pixels, list) or not all(isinstance(v, (int, float)) for v in x_pixels):
+                raise ValueError
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="x_positions must be a JSON array of numbers")
+
+        image_bytes = await image.read()
+
+        if len(image_bytes) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail=f"Image exceeds maximum allowed size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
+
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if img is None:
+            raise HTTPException(status_code=400, detail="Invalid image format")
+
+        segmenter = get_hair_segmenter(HAIR_MODEL_PATH)
+        points = segmenter.detect_hairline(img, x_pixels)
+
+        return {
+            "status": "success",
+            "points": points,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Hairline detection error: {str(e)}")
 
 
 if __name__ == "__main__":
