@@ -26,11 +26,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 import { LensMark } from '../components/LensMark';
 import { SERIF } from '../components/ProfileFields';
 import { useAuth } from '../contexts/AuthContext';
 import { FIREBASE_SETUP_HINT } from '../config/firebase';
+import { FeatureFlags } from '../config/flags';
 
 const PINK = '#C2185B';
 const TEXT = '#1A1A1A';
@@ -46,6 +48,7 @@ export default function LoginScreen() {
     sendPasswordReset,
   } = useAuth();
 
+  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [mode, setMode] = useState<Mode>('signin');
@@ -144,6 +147,17 @@ export default function LoginScreen() {
               <Ionicons name="warning-outline" size={18} color="#8A6100" />
               <Text style={styles.setupBannerText}>{FIREBASE_SETUP_HINT}</Text>
             </View>
+          )}
+
+          {__DEV__ && FeatureFlags.DEV_BYPASS_LOGIN && (
+            <TouchableOpacity
+              style={styles.devSkipBtn}
+              onPress={() => router.replace('/scan')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="flask-outline" size={16} color={PINK} />
+              <Text style={styles.devSkipText}>Skip login (dev) — go to Scan</Text>
+            </TouchableOpacity>
           )}
 
           <View style={[styles.card, { paddingBottom: 24 + insets.bottom }]}>
@@ -344,6 +358,24 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: '#8A6100',
     lineHeight: 18,
+  },
+  devSkipBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: PINK,
+    borderStyle: 'dashed',
+    borderRadius: 10,
+    paddingVertical: 9,
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  devSkipText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: PINK,
   },
 
   card: {

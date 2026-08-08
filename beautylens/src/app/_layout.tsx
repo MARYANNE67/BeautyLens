@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
 
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { FeatureFlags } from '../config/flags';
 
 const PINK = '#C2185B';
 const BG = '#F6F1F4';
@@ -23,12 +24,29 @@ function Splash() {
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, initializing } = useAuth();
   const segments = useSegments();
+  const pathname = usePathname();
   const router = useRouter();
+
+  // Dev-only escape hatch, off by default -- see FeatureFlags.DEV_BYPASS_LOGIN.
+  // AND-ed with __DEV__ so a stray `true` left in the flag can never affect a
+  // production/release build (Metro/EAS release builds set __DEV__ false).
+  const devBypass = __DEV__ && FeatureFlags.DEV_BYPASS_LOGIN;
 
   useEffect(() => {
     // Wait for the persisted session to be restored, otherwise every cold start
     // would briefly bounce an already-signed-in user to the login screen.
     if (initializing) return;
+
+    if (devBypass) {
+      // The bypass skips the login redirect entirely, but index.tsx's
+      // "wait for the backend session" spinner would still spin forever --
+      // there's no real auth to produce one. Skip straight to a screen
+      // that doesn't need a session.
+      if (pathname === '/') {
+        router.replace('/scan');
+      }
+      return;
+    }
 
     const onLoginScreen = segments[0] === 'login';
 
@@ -39,7 +57,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       // depending on whether this account already has a profile.
       router.replace('/');
     }
-  }, [user, initializing, segments, router]);
+  }, [user, initializing, segments, pathname, router, devBypass]);
 
   if (initializing) return <Splash />;
 
