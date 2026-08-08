@@ -33,13 +33,28 @@ export const CHIN_INDICES = [148, 152, 377];
 export const LEFT_TEMPLE_INDEX = 127;
 export const RIGHT_TEMPLE_INDEX = 356;
 
-// Upper arc of face_oval_indices: hairline-ish boundary of the forehead.
-// Approximates the forehead region using only already-validated points --
-// it traces the outer boundary, not a hairline-to-brow interior fill.
+// Upper arc of face_oval_indices, from LEFT_TEMPLE_INDEX (127) through the
+// top (10) to RIGHT_TEMPLE_INDEX (356) -- hairline-ish boundary of the
+// forehead. Order matters: this must walk the oval loop's actual sequence
+// (127,162,21,54,103,67,109,10,338,297,332,284,251,389,356), not an
+// arbitrary re-ordering -- an earlier version mixed forward/reverse
+// segments and dropped 162/389, which made the polyline zigzag back on
+// itself instead of tracing a smooth arc (visually confirmed broken: a
+// self-crossing triangular flap near the temple instead of a hairline arc).
 export const FOREHEAD_INDICES = [
-  10, 338, 297, 332, 284, 251, 356,
-  127, 109, 67, 103, 54, 21,
+  127, 162, 21, 54, 103, 67, 109,
+  10,
+  338, 297, 332, 284, 251, 389, 356,
 ];
+
+// Short sub-arcs at just the temple corners of the forehead (same oval loop,
+// order preserved) -- for techniques that target the sides specifically
+// (e.g. narrowing a heart-shaped forehead) rather than a line across the
+// full width, which for a taller/larger forehead can land mid-forehead
+// instead of near the hairline (MediaPipe's oval-top landmarks approximate
+// average facial proportions; there's no dedicated hairline landmark here).
+export const LEFT_FOREHEAD_SIDE_INDICES = [127, 162, 21];
+export const RIGHT_FOREHEAD_SIDE_INDICES = [356, 389, 251];
 
 // Widest point of the face oval -- the standard MediaPipe proxy for
 // zygomatic/cheekbone width. Single points (not a filled region): there's
@@ -69,6 +84,11 @@ export const RIGHT_MOUTH_CORNER_INDEX = 291; // already in outer_lip_indices
 export const NOSE_BRIDGE_INDEX = 6; // commonly-cited MediaPipe nose-bridge point
 export const LEFT_JAW_CORNER_INDEX = 58; // already in JAWLINE_INDICES
 export const RIGHT_JAW_CORNER_INDEX = 288; // already in JAWLINE_INDICES
+// Glabella (between the eyebrows) -- used as the reference point for
+// extrapolating forehead-touching zones further toward the hairline, since
+// FOREHEAD_INDICES/LEFT_FOREHEAD_SIDE_INDICES/RIGHT_FOREHEAD_SIDE_INDICES
+// approximate average forehead height and undershoot for a taller forehead.
+export const GLABELLA_INDEX = 9;
 
 export interface NewFacialRegions {
   jawline: Landmark[];
@@ -76,6 +96,8 @@ export interface NewFacialRegions {
   left_temple: Landmark[];
   right_temple: Landmark[];
   forehead: Landmark[];
+  left_forehead_side: Landmark[];
+  right_forehead_side: Landmark[];
 }
 
 export const getNewFacialRegions = (landmarks: Landmark[]): NewFacialRegions => ({
@@ -84,6 +106,8 @@ export const getNewFacialRegions = (landmarks: Landmark[]): NewFacialRegions => 
   left_temple: getLandmarks(landmarks, [LEFT_TEMPLE_INDEX]),
   right_temple: getLandmarks(landmarks, [RIGHT_TEMPLE_INDEX]),
   forehead: getLandmarks(landmarks, FOREHEAD_INDICES),
+  left_forehead_side: getLandmarks(landmarks, LEFT_FOREHEAD_SIDE_INDICES),
+  right_forehead_side: getLandmarks(landmarks, RIGHT_FOREHEAD_SIDE_INDICES),
 });
 
 const distance = (a: Landmark, b: Landmark): number =>

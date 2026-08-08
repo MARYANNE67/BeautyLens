@@ -5,8 +5,8 @@
  * actual product color over lips/eyes), these categories are about
  * technique, not color: contour, concealer, highlighter, blush, bronzer.
  * For these, the camera screen shows WHERE to place the product for the
- * user's specific face shape, as a traced line/band + a small text label,
- * rather than a filled color wash.
+ * user's specific face shape, as a traced line/band on the face -- no text
+ * is drawn on the overlay itself -- rather than a filled color wash.
  *
  * Placement rules live in a single declarative table (PLACEMENT_RULES)
  * rather than one bespoke render function per category -- adding a shape or
@@ -51,6 +51,21 @@ import {
   NOSE_BRIDGE_INDEX,
 } from './faceGeometry';
 
+// A "push toward the hairline" extrapolation (from the glabella) was tried
+// and reverted: it moves points radially away from a center reference,
+// which for the temple-side points (already well off-center) pushes them
+// sideways as much as upward -- confirmed visually to land outside the face
+// entirely. The real fix is the hairline detection below (backed by
+// src/api/hair_segmentation.py's actual hair/skin boundary measurement,
+// not a landmark approximation) -- forehead-touching zones prefer that
+// when available and fall back to the landmark approximation otherwise.
+
+/** left/center/right x-sample keys for the real (segmentation-measured)
+ * hairline -- see camera.tsx, which fetches this once per session at the
+ * x-positions of LEFT_TEMPLE_INDEX/FOREHEAD_CENTER_INDEX/RIGHT_TEMPLE_INDEX. */
+export type HairlineKey = 'left' | 'center' | 'right';
+export type HairlinePoints = Record<HairlineKey, Pick<Landmark, 'x' | 'y'> | null>;
+
 export type TutorialShape = MeshBand | MeshMarker | MeshLabel;
 export type PlacementCategory = 'contour' | 'concealer' | 'highlighter' | 'blush' | 'bronzer';
 
@@ -79,24 +94,57 @@ const CATEGORY_COLOR: Record<PlacementCategory, string> = {
 
 /** Where a zone's points come from. `sequence` concatenates sub-sources
  * in order, so a band can be composed from several already-trusted
- * anchors (e.g. "under-eye, swept out toward the temple"). */
+ * anchors (e.g. "under-eye, swept out toward the temple"). `interpolate`
+ * produces a synthetic point a fraction `t` of the way from landmark `a`
+ * to landmark `b` -- e.g. stopping short of a landmark rather than running
+ * a band all the way to it. `hairlineOr` uses the real (segmentation-
+ * measured) hairline point(s) when all requested keys are non-null,
+ * falling back to `fallback` (a landmark approximation) otherwise -- an
+ * all-or-nothing choice per zone, not point-by-point substitution. */
 type PointSource =
   | { region: keyof FacialRegions }
+  | { regionExcludingAt: { region: keyof FacialRegions; exclude: number[] } }
   | { newRegion: keyof NewFacialRegions }
   | { indices: number[] }
-  | { sequence: PointSource[] };
+  | { sequence: PointSource[] }
+  | { interpolate: { a: number; b: number; t: number } }
+  | { hairlineOr: { keys: HairlineKey[]; fallback: PointSource } };
 
 function resolvePoints(
   source: PointSource,
   facialRegions: FacialRegions | null,
   newRegions: NewFacialRegions,
-  landmarks: Landmark[]
+  landmarks: Landmark[],
+  hairline: HairlinePoints | null
 ): Landmark[] {
   if ('sequence' in source) {
-    return source.sequence.flatMap((s) => resolvePoints(s, facialRegions, newRegions, landmarks));
+    return source.sequence.flatMap((s) => resolvePoints(s, facialRegions, newRegions, landmarks, hairline));
   }
   if ('region' in source) return facialRegions?.[source.region] ?? [];
+  if ('regionExcludingAt' in source) {
+    const { region, exclude } = source.regionExcludingAt;
+    const points = facialRegions?.[region] ?? [];
+    return points.filter((_, i) => !exclude.includes(i));
+  }
   if ('newRegion' in source) return newRegions[source.newRegion] ?? [];
+  if ('hairlineOr' in source) {
+    const { keys, fallback } = source.hairlineOr;
+    if (hairline && keys.every((k) => hairline[k] !== null)) {
+      return keys.map((k) => ({ ...hairline[k]!, z: 0 }));
+    }
+    return resolvePoints(fallback, facialRegions, newRegions, landmarks, hairline);
+  }
+  if ('interpolate' in source) {
+    const { a, b, t } = source.interpolate;
+    const pointA = landmarks[a];
+    const pointB = landmarks[b];
+    if (!pointA || !pointB) return [];
+    return [{
+      x: pointA.x + t * (pointB.x - pointA.x),
+      y: pointA.y + t * (pointB.y - pointA.y),
+      z: pointA.z + t * (pointB.z - pointA.z),
+    }];
+  }
   return source.indices.filter((i) => i >= 0 && i < landmarks.length).map((i) => landmarks[i]);
 }
 
@@ -118,6 +166,22 @@ interface ShapeCategoryRule {
 
 type PlacementRules = Record<PlacementCategory, Record<FaceShape, ShapeCategoryRule>>;
 
+// LEFT_CHEEKBONE_INDEX/RIGHT_CHEEKBONE_INDEX (234/454) is the community-
+// standard "cheek width" landmark, and traced correctly on a static test
+// photo (~31px below eye level, not up at eye level) -- but on live camera
+// captures it consistently rendered up near eye-corner height instead of
+// true cheek height, confirmed on the same face both with and without
+// glasses (so a live-tracking accuracy issue for this landmark, not a
+// glasses-specific one). Nudging it 30% of the way toward the mouth corner
+// brings it down into more plausible cheek territory. Reuses the existing
+// `interpolate` mechanism -- low risk, since interpolating between two
+// already-on-face points can't send it flying off the face the way the
+// earlier glabella-extrapolation attempt did (see the removed
+// towardHairline() history above). A best-effort correction based on
+// visual reports, not a verified fix -- the 0.3 fraction may need retuning.
+const LEFT_CHEEK_MARKER: PointSource = { interpolate: { a: LEFT_CHEEKBONE_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.3 } };
+const RIGHT_CHEEK_MARKER: PointSource = { interpolate: { a: RIGHT_CHEEKBONE_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.3 } };
+
 // --- Placement rules table ----------------------------------------------
 //
 // Sources (fetched and summarized when this table was written):
@@ -136,23 +200,23 @@ export const PLACEMENT_RULES: PlacementRules = {
   contour: {
     oval: {
       zones: [
-        { key: 'contour-left-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [{ indices: [LEFT_CHEEKBONE_INDEX] }, { indices: [LEFT_MOUTH_CORNER_INDEX] }] } },
-        { key: 'contour-right-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [{ indices: [RIGHT_CHEEKBONE_INDEX] }, { indices: [RIGHT_MOUTH_CORNER_INDEX] }] } },
+        { key: 'contour-left-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [LEFT_CHEEK_MARKER, { interpolate: { a: LEFT_CHEEKBONE_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'contour-right-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [RIGHT_CHEEK_MARKER, { interpolate: { a: RIGHT_CHEEKBONE_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
       ],
       label: 'Light contour along the cheek hollows',
     },
     round: {
       zones: [
         { key: 'contour-jawline', kind: 'band', opacity: 0.5, strokeWidth: 8, source: { newRegion: 'jawline' } },
-        { key: 'contour-left-hollow', kind: 'band', opacity: 0.55, strokeWidth: 10, source: { sequence: [{ indices: [LEFT_CHEEKBONE_INDEX] }, { indices: [LEFT_MOUTH_CORNER_INDEX] }] } },
-        { key: 'contour-right-hollow', kind: 'band', opacity: 0.55, strokeWidth: 10, source: { sequence: [{ indices: [RIGHT_CHEEKBONE_INDEX] }, { indices: [RIGHT_MOUTH_CORNER_INDEX] }] } },
+        { key: 'contour-left-hollow', kind: 'band', opacity: 0.55, strokeWidth: 10, source: { sequence: [LEFT_CHEEK_MARKER, { interpolate: { a: LEFT_CHEEKBONE_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'contour-right-hollow', kind: 'band', opacity: 0.55, strokeWidth: 10, source: { sequence: [RIGHT_CHEEK_MARKER, { interpolate: { a: RIGHT_CHEEKBONE_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
       ],
       label: 'Contour jaw + cheek hollows to add definition',
     },
     square: {
       zones: [
-        { key: 'contour-left-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [{ indices: [LEFT_CHEEKBONE_INDEX] }, { indices: [LEFT_MOUTH_CORNER_INDEX] }] } },
-        { key: 'contour-right-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [{ indices: [RIGHT_CHEEKBONE_INDEX] }, { indices: [RIGHT_MOUTH_CORNER_INDEX] }] } },
+        { key: 'contour-left-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [LEFT_CHEEK_MARKER, { interpolate: { a: LEFT_CHEEKBONE_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'contour-right-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [RIGHT_CHEEK_MARKER, { interpolate: { a: RIGHT_CHEEKBONE_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
         { key: 'contour-left-temple', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, { indices: [LEFT_JAW_CORNER_INDEX] }] } },
         { key: 'contour-right-temple', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, { indices: [RIGHT_JAW_CORNER_INDEX] }] } },
       ],
@@ -160,13 +224,14 @@ export const PLACEMENT_RULES: PlacementRules = {
     },
     heart: {
       zones: [
-        { key: 'contour-forehead', kind: 'band', opacity: 0.5, strokeWidth: 8, source: { newRegion: 'forehead' } },
+        { key: 'contour-left-forehead-side', kind: 'band', opacity: 0.5, strokeWidth: 8, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, { hairlineOr: { keys: ['left'], fallback: { newRegion: 'left_forehead_side' } } }] } },
+        { key: 'contour-right-forehead-side', kind: 'band', opacity: 0.5, strokeWidth: 8, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, { hairlineOr: { keys: ['right'], fallback: { newRegion: 'right_forehead_side' } } }] } },
       ],
       label: 'Contour temples/forehead sides to narrow',
     },
     long: {
       zones: [
-        { key: 'contour-forehead', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { newRegion: 'forehead' } },
+        { key: 'contour-forehead', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { hairlineOr: { keys: ['left', 'center', 'right'], fallback: { newRegion: 'forehead' } } } },
         { key: 'contour-jawline', kind: 'band', opacity: 0.35, strokeWidth: 8, source: { newRegion: 'jawline' } },
         { key: 'contour-chin', kind: 'band', opacity: 0.35, strokeWidth: 6, source: { newRegion: 'chin' } },
       ],
@@ -177,11 +242,23 @@ export const PLACEMENT_RULES: PlacementRules = {
   // Same universal "triangle geometry" technique for every shape -- no
   // shape-specific concealer source was found, so this isn't varied per
   // FaceShape the way contour/blush/bronzer/highlighter are.
+  //
+  // right_under_eye's index 6 (landmark 447, in src/api/face_mesh.py's
+  // right_under_eye_indices) is a genuine spatial outlier confirmed against
+  // a real face -- its neighbors trace a smooth ~10px-step curve, but this
+  // one point lands ~30px away in both x and y, which reads as an obvious
+  // visual spike when rendered as an open band (a filled polygon, as the
+  // original color-preview concealer uses, hides this kind of jaggedness;
+  // a stroked band doesn't). Filtered out here rather than fixed in
+  // face_mesh.py itself, since that index list is shared with the
+  // unrelated color-preview feature and the correct replacement landmark
+  // isn't verified -- this is a targeted workaround for the tutorial
+  // rendering, not a fix to the underlying data.
   concealer: (() => {
     const rule: ShapeCategoryRule = {
       zones: [
         { key: 'concealer-left-under-eye', kind: 'band', opacity: 0.6, strokeWidth: 10, source: { region: 'left_under_eye' } },
-        { key: 'concealer-right-under-eye', kind: 'band', opacity: 0.6, strokeWidth: 10, source: { region: 'right_under_eye' } },
+        { key: 'concealer-right-under-eye', kind: 'band', opacity: 0.6, strokeWidth: 10, source: { regionExcludingAt: { region: 'right_under_eye', exclude: [6] } } },
         { key: 'concealer-forehead', kind: 'marker', opacity: 0.5, radius: 8, source: { indices: [FOREHEAD_CENTER_INDEX] } },
         { key: 'concealer-chin', kind: 'marker', opacity: 0.5, radius: 8, source: { indices: [CHIN_TIP_INDEX] } },
         { key: 'concealer-nose-bridge', kind: 'marker', opacity: 0.5, radius: 6, source: { indices: [NOSE_BRIDGE_INDEX] } },
@@ -196,20 +273,20 @@ export const PLACEMENT_RULES: PlacementRules = {
   highlighter: {
     oval: {
       zones: [
-        { key: 'highlighter-left-cheekbone', kind: 'marker', opacity: 0.7, radius: 9, source: { indices: [LEFT_CHEEKBONE_INDEX] } },
-        { key: 'highlighter-right-cheekbone', kind: 'marker', opacity: 0.7, radius: 9, source: { indices: [RIGHT_CHEEKBONE_INDEX] } },
+        { key: 'highlighter-left-cheekbone', kind: 'marker', opacity: 0.7, radius: 9, source: LEFT_CHEEK_MARKER },
+        { key: 'highlighter-right-cheekbone', kind: 'marker', opacity: 0.7, radius: 9, source: RIGHT_CHEEK_MARKER },
         { key: 'highlighter-nose-bridge', kind: 'marker', opacity: 0.6, radius: 6, source: { indices: [NOSE_BRIDGE_INDEX] } },
         { key: 'highlighter-cupids-bow', kind: 'marker', opacity: 0.6, radius: 6, source: { indices: [CUPIDS_BOW_INDEX] } },
         { key: 'highlighter-chin', kind: 'marker', opacity: 0.6, radius: 8, source: { indices: [CHIN_TIP_INDEX] } },
         { key: 'highlighter-left-under-eye', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { region: 'left_under_eye' } },
-        { key: 'highlighter-right-under-eye', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { region: 'right_under_eye' } },
+        { key: 'highlighter-right-under-eye', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { regionExcludingAt: { region: 'right_under_eye', exclude: [6] } } },
       ],
       label: "Highlight: cheekbones, nose bridge, cupid's bow, chin, under-eyes",
     },
     round: {
       zones: [
-        { key: 'highlighter-left-cheek-lift', kind: 'band', opacity: 0.5, strokeWidth: 8, source: { sequence: [{ indices: [LEFT_CHEEKBONE_INDEX] }, { indices: [LEFT_TEMPLE_INDEX] }] } },
-        { key: 'highlighter-right-cheek-lift', kind: 'band', opacity: 0.5, strokeWidth: 8, source: { sequence: [{ indices: [RIGHT_CHEEKBONE_INDEX] }, { indices: [RIGHT_TEMPLE_INDEX] }] } },
+        { key: 'highlighter-left-cheek-lift', kind: 'band', opacity: 0.5, strokeWidth: 8, source: { sequence: [LEFT_CHEEK_MARKER, { indices: [LEFT_TEMPLE_INDEX] }] } },
+        { key: 'highlighter-right-cheek-lift', kind: 'band', opacity: 0.5, strokeWidth: 8, source: { sequence: [RIGHT_CHEEK_MARKER, { indices: [RIGHT_TEMPLE_INDEX] }] } },
         { key: 'highlighter-cupids-bow', kind: 'marker', opacity: 0.6, radius: 6, source: { indices: [CUPIDS_BOW_INDEX] } },
         { key: 'highlighter-chin', kind: 'marker', opacity: 0.6, radius: 8, source: { indices: [CHIN_TIP_INDEX] } },
       ],
@@ -217,8 +294,8 @@ export const PLACEMENT_RULES: PlacementRules = {
     },
     square: {
       zones: [
-        { key: 'highlighter-left-cheekbone', kind: 'marker', opacity: 0.7, radius: 9, source: { indices: [LEFT_CHEEKBONE_INDEX] } },
-        { key: 'highlighter-right-cheekbone', kind: 'marker', opacity: 0.7, radius: 9, source: { indices: [RIGHT_CHEEKBONE_INDEX] } },
+        { key: 'highlighter-left-cheekbone', kind: 'marker', opacity: 0.7, radius: 9, source: LEFT_CHEEK_MARKER },
+        { key: 'highlighter-right-cheekbone', kind: 'marker', opacity: 0.7, radius: 9, source: RIGHT_CHEEK_MARKER },
         { key: 'highlighter-nose-bridge', kind: 'marker', opacity: 0.6, radius: 6, source: { indices: [NOSE_BRIDGE_INDEX] } },
         { key: 'highlighter-chin', kind: 'marker', opacity: 0.5, radius: 7, source: { indices: [CHIN_TIP_INDEX] } },
       ],
@@ -226,8 +303,8 @@ export const PLACEMENT_RULES: PlacementRules = {
     },
     heart: {
       zones: [
-        { key: 'highlighter-left-cheekbone', kind: 'marker', opacity: 0.65, radius: 8, source: { indices: [LEFT_CHEEKBONE_INDEX] } },
-        { key: 'highlighter-right-cheekbone', kind: 'marker', opacity: 0.65, radius: 8, source: { indices: [RIGHT_CHEEKBONE_INDEX] } },
+        { key: 'highlighter-left-cheekbone', kind: 'marker', opacity: 0.65, radius: 8, source: LEFT_CHEEK_MARKER },
+        { key: 'highlighter-right-cheekbone', kind: 'marker', opacity: 0.65, radius: 8, source: RIGHT_CHEEK_MARKER },
         { key: 'highlighter-chin', kind: 'marker', opacity: 0.7, radius: 11, source: { indices: [CHIN_TIP_INDEX] } },
         { key: 'highlighter-cupids-bow', kind: 'marker', opacity: 0.6, radius: 6, source: { indices: [CUPIDS_BOW_INDEX] } },
       ],
@@ -235,11 +312,11 @@ export const PLACEMENT_RULES: PlacementRules = {
     },
     long: {
       zones: [
-        { key: 'highlighter-left-cheekbone', kind: 'marker', opacity: 0.65, radius: 9, source: { indices: [LEFT_CHEEKBONE_INDEX] } },
-        { key: 'highlighter-right-cheekbone', kind: 'marker', opacity: 0.65, radius: 9, source: { indices: [RIGHT_CHEEKBONE_INDEX] } },
+        { key: 'highlighter-left-cheekbone', kind: 'marker', opacity: 0.65, radius: 9, source: LEFT_CHEEK_MARKER },
+        { key: 'highlighter-right-cheekbone', kind: 'marker', opacity: 0.65, radius: 9, source: RIGHT_CHEEK_MARKER },
         { key: 'highlighter-chin', kind: 'marker', opacity: 0.65, radius: 11, source: { indices: [CHIN_TIP_INDEX] } },
         { key: 'highlighter-left-under-eye-wide', kind: 'band', opacity: 0.35, strokeWidth: 8, source: { sequence: [{ region: 'left_under_eye' }, { indices: [LEFT_TEMPLE_INDEX] }] } },
-        { key: 'highlighter-right-under-eye-wide', kind: 'band', opacity: 0.35, strokeWidth: 8, source: { sequence: [{ region: 'right_under_eye' }, { indices: [RIGHT_TEMPLE_INDEX] }] } },
+        { key: 'highlighter-right-under-eye-wide', kind: 'band', opacity: 0.35, strokeWidth: 8, source: { sequence: [{ regionExcludingAt: { region: 'right_under_eye', exclude: [6] } }, { indices: [RIGHT_TEMPLE_INDEX] }] } },
       ],
       label: 'Highlight chin + cheekbones; sweep under-eyes toward temples to widen',
     },
@@ -252,36 +329,36 @@ export const PLACEMENT_RULES: PlacementRules = {
     // landmarks don't give finer cheek granularity to separate them further.
     oval: {
       zones: [
-        { key: 'blush-left-cheek', kind: 'marker', opacity: 0.5, radius: 14, source: { indices: [LEFT_CHEEKBONE_INDEX] } },
-        { key: 'blush-right-cheek', kind: 'marker', opacity: 0.5, radius: 14, source: { indices: [RIGHT_CHEEKBONE_INDEX] } },
+        { key: 'blush-left-cheek', kind: 'marker', opacity: 0.5, radius: 14, source: LEFT_CHEEK_MARKER },
+        { key: 'blush-right-cheek', kind: 'marker', opacity: 0.5, radius: 14, source: RIGHT_CHEEK_MARKER },
       ],
       label: 'Blush: highest point of the cheekbones, diffused outward',
     },
     round: {
       zones: [
-        { key: 'blush-left-line', kind: 'band', opacity: 0.5, strokeWidth: 10, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, { indices: [LEFT_CHEEKBONE_INDEX] }] } },
-        { key: 'blush-right-line', kind: 'band', opacity: 0.5, strokeWidth: 10, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, { indices: [RIGHT_CHEEKBONE_INDEX] }] } },
+        { key: 'blush-left-line', kind: 'band', opacity: 0.5, strokeWidth: 10, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, LEFT_CHEEK_MARKER] } },
+        { key: 'blush-right-line', kind: 'band', opacity: 0.5, strokeWidth: 10, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, RIGHT_CHEEK_MARKER] } },
       ],
       label: 'Blush: straight line from ear toward center, along the cheekbone — skip the apples',
     },
     square: {
       zones: [
-        { key: 'blush-left-cheek', kind: 'marker', opacity: 0.45, radius: 18, source: { indices: [LEFT_CHEEKBONE_INDEX] } },
-        { key: 'blush-right-cheek', kind: 'marker', opacity: 0.45, radius: 18, source: { indices: [RIGHT_CHEEKBONE_INDEX] } },
+        { key: 'blush-left-cheek', kind: 'marker', opacity: 0.45, radius: 18, source: LEFT_CHEEK_MARKER },
+        { key: 'blush-right-cheek', kind: 'marker', opacity: 0.45, radius: 18, source: RIGHT_CHEEK_MARKER },
       ],
       label: 'Blush: soft, rounded on the apples — avoid sharp diagonal lines',
     },
     heart: {
       zones: [
-        { key: 'blush-left-up', kind: 'band', opacity: 0.5, strokeWidth: 9, source: { sequence: [{ indices: [LEFT_CHEEKBONE_INDEX] }, { indices: [LEFT_TEMPLE_INDEX] }] } },
-        { key: 'blush-right-up', kind: 'band', opacity: 0.5, strokeWidth: 9, source: { sequence: [{ indices: [RIGHT_CHEEKBONE_INDEX] }, { indices: [RIGHT_TEMPLE_INDEX] }] } },
+        { key: 'blush-left-up', kind: 'band', opacity: 0.5, strokeWidth: 9, source: { sequence: [LEFT_CHEEK_MARKER, { indices: [LEFT_TEMPLE_INDEX] }] } },
+        { key: 'blush-right-up', kind: 'band', opacity: 0.5, strokeWidth: 9, source: { sequence: [RIGHT_CHEEK_MARKER, { indices: [RIGHT_TEMPLE_INDEX] }] } },
       ],
       label: 'Blush: tops of the cheekbones, blended up toward the brow tail',
     },
     long: {
       zones: [
-        { key: 'blush-left-line', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, { indices: [LEFT_CHEEKBONE_INDEX] }] } },
-        { key: 'blush-right-line', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, { indices: [RIGHT_CHEEKBONE_INDEX] }] } },
+        { key: 'blush-left-line', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, LEFT_CHEEK_MARKER] } },
+        { key: 'blush-right-line', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, RIGHT_CHEEK_MARKER] } },
       ],
       label: "Blush: short straight line on the apples — don't blend too far out",
     },
@@ -290,24 +367,24 @@ export const PLACEMENT_RULES: PlacementRules = {
   bronzer: {
     oval: {
       zones: [
-        { key: 'bronzer-left-sweep', kind: 'band', opacity: 0.28, strokeWidth: 10, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, { indices: [LEFT_CHEEKBONE_INDEX] }, { indices: [LEFT_JAW_CORNER_INDEX] }] } },
-        { key: 'bronzer-right-sweep', kind: 'band', opacity: 0.28, strokeWidth: 10, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, { indices: [RIGHT_CHEEKBONE_INDEX] }, { indices: [RIGHT_JAW_CORNER_INDEX] }] } },
+        { key: 'bronzer-left-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, LEFT_CHEEK_MARKER, { indices: [LEFT_JAW_CORNER_INDEX] }] } },
+        { key: 'bronzer-right-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, RIGHT_CHEEK_MARKER, { indices: [RIGHT_JAW_CORNER_INDEX] }] } },
       ],
       label: 'Bronzer: light sweep from temple, under the cheekbone, to the jaw',
     },
     round: {
       zones: [
-        { key: 'bronzer-left-lift', kind: 'band', opacity: 0.3, strokeWidth: 10, source: { sequence: [{ indices: [LEFT_CHEEKBONE_INDEX] }, { indices: [LEFT_TEMPLE_INDEX] }] } },
-        { key: 'bronzer-right-lift', kind: 'band', opacity: 0.3, strokeWidth: 10, source: { sequence: [{ indices: [RIGHT_CHEEKBONE_INDEX] }, { indices: [RIGHT_TEMPLE_INDEX] }] } },
+        { key: 'bronzer-left-lift', kind: 'band', opacity: 0.48, strokeWidth: 12, source: { sequence: [LEFT_CHEEK_MARKER, { indices: [LEFT_TEMPLE_INDEX] }] } },
+        { key: 'bronzer-right-lift', kind: 'band', opacity: 0.48, strokeWidth: 12, source: { sequence: [RIGHT_CHEEK_MARKER, { indices: [RIGHT_TEMPLE_INDEX] }] } },
       ],
       label: 'Bronzer: cheekbones blending up toward the temples to lift',
     },
     square: {
       zones: [
-        { key: 'bronzer-left-temple-hairline', kind: 'band', opacity: 0.3, strokeWidth: 10, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, { newRegion: 'forehead' }] } },
-        { key: 'bronzer-right-temple-hairline', kind: 'band', opacity: 0.3, strokeWidth: 10, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, { newRegion: 'forehead' }] } },
-        { key: 'bronzer-jawline', kind: 'band', opacity: 0.25, strokeWidth: 8, source: { newRegion: 'jawline' } },
-        { key: 'bronzer-chin', kind: 'band', opacity: 0.25, strokeWidth: 6, source: { newRegion: 'chin' } },
+        { key: 'bronzer-left-temple-hairline', kind: 'band', opacity: 0.48, strokeWidth: 12, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, { hairlineOr: { keys: ['left'], fallback: { newRegion: 'forehead' } } }] } },
+        { key: 'bronzer-right-temple-hairline', kind: 'band', opacity: 0.48, strokeWidth: 12, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, { hairlineOr: { keys: ['right'], fallback: { newRegion: 'forehead' } } }] } },
+        { key: 'bronzer-jawline', kind: 'band', opacity: 0.4, strokeWidth: 10, source: { newRegion: 'jawline' } },
+        { key: 'bronzer-chin', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { newRegion: 'chin' } },
       ],
       label: 'Bronzer: temples toward the hairline, plus light jaw + chin contour',
     },
@@ -315,18 +392,18 @@ export const PLACEMENT_RULES: PlacementRules = {
     // 3-point sweep (temple / cheek hollow / jaw) rather than inventing one.
     heart: {
       zones: [
-        { key: 'bronzer-left-sweep', kind: 'band', opacity: 0.28, strokeWidth: 10, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, { indices: [LEFT_CHEEKBONE_INDEX] }, { indices: [LEFT_JAW_CORNER_INDEX] }] } },
-        { key: 'bronzer-right-sweep', kind: 'band', opacity: 0.28, strokeWidth: 10, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, { indices: [RIGHT_CHEEKBONE_INDEX] }, { indices: [RIGHT_JAW_CORNER_INDEX] }] } },
+        { key: 'bronzer-left-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, LEFT_CHEEK_MARKER, { indices: [LEFT_JAW_CORNER_INDEX] }] } },
+        { key: 'bronzer-right-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, RIGHT_CHEEK_MARKER, { indices: [RIGHT_JAW_CORNER_INDEX] }] } },
       ],
       label: 'Bronzer: general sweep — temple, cheek hollow, jaw',
     },
     long: {
       zones: [
-        { key: 'bronzer-forehead', kind: 'band', opacity: 0.3, strokeWidth: 10, source: { newRegion: 'forehead' } },
-        { key: 'bronzer-left-hollow', kind: 'band', opacity: 0.3, strokeWidth: 8, source: { sequence: [{ indices: [LEFT_CHEEKBONE_INDEX] }, { indices: [LEFT_MOUTH_CORNER_INDEX] }] } },
-        { key: 'bronzer-right-hollow', kind: 'band', opacity: 0.3, strokeWidth: 8, source: { sequence: [{ indices: [RIGHT_CHEEKBONE_INDEX] }, { indices: [RIGHT_MOUTH_CORNER_INDEX] }] } },
-        { key: 'bronzer-jawline', kind: 'band', opacity: 0.3, strokeWidth: 8, source: { newRegion: 'jawline' } },
-        { key: 'bronzer-chin', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { newRegion: 'chin' } },
+        { key: 'bronzer-forehead', kind: 'band', opacity: 0.48, strokeWidth: 12, source: { hairlineOr: { keys: ['left', 'center', 'right'], fallback: { newRegion: 'forehead' } } } },
+        { key: 'bronzer-left-hollow', kind: 'band', opacity: 0.48, strokeWidth: 10, source: { sequence: [LEFT_CHEEK_MARKER, { interpolate: { a: LEFT_CHEEKBONE_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'bronzer-right-hollow', kind: 'band', opacity: 0.48, strokeWidth: 10, source: { sequence: [RIGHT_CHEEK_MARKER, { interpolate: { a: RIGHT_CHEEKBONE_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'bronzer-jawline', kind: 'band', opacity: 0.48, strokeWidth: 10, source: { newRegion: 'jawline' } },
+        { key: 'bronzer-chin', kind: 'band', opacity: 0.48, strokeWidth: 8, source: { newRegion: 'chin' } },
       ],
       label: 'Bronzer: hairline + cheek hollows + jaw + chin to shorten the face',
     },
@@ -340,28 +417,32 @@ function toScreenPoints(points: Landmark[], scalingParams: ScalingParams) {
   return points.map((p) => scalePoint(p, scaleX, scaleY, offsetX, offsetY, mirrorX, viewWidth));
 }
 
-function midpoint(points: { x: number; y: number }[]): { x: number; y: number } {
-  return points[Math.floor(points.length / 2)] ?? { x: 0, y: 0 };
-}
+/** Builds the rendered shapes for one category+faceShape rule. No text is
+ * ever drawn on the camera overlay -- rule.label exists for callers that
+ * want to show instructional copy in their own UI (e.g. a chip bar), not
+ * for rendering onto the face. */
+// These zones mark general placement *areas* ("along the cheek hollow",
+// "the cheekbone") rather than exact points, so the drawn size is
+// deliberately larger than the rule table's base strokeWidth/radius values
+// -- scaled up here in one place rather than inflating every one of the
+// ~50 zone definitions individually, so the "how much bigger" tuning stays
+// a single knob.
+const BAND_WIDTH_SCALE = 1.8;
+const MARKER_RADIUS_SCALE = 1.6;
 
-function labelNear(key: string, anchor: { x: number; y: number }, text: string, color: string): MeshLabel {
-  return { key, type: 'label', x: anchor.x, y: anchor.y - 10, text, color };
-}
-
-/** Builds the rendered shapes for one category+faceShape rule. */
 function buildZonesFromRules(
   rule: ShapeCategoryRule,
   color: string,
   facialRegions: FacialRegions | null,
   newRegions: NewFacialRegions,
   landmarks: Landmark[],
-  scalingParams: ScalingParams
+  scalingParams: ScalingParams,
+  hairline: HairlinePoints | null
 ): TutorialShape[] {
   const shapes: TutorialShape[] = [];
-  let labelAnchor: { x: number; y: number } | null = null;
 
   for (const zone of rule.zones) {
-    const rawPoints = resolvePoints(zone.source, facialRegions, newRegions, landmarks);
+    const rawPoints = resolvePoints(zone.source, facialRegions, newRegions, landmarks, hairline);
     if (zone.kind === 'band') {
       if (rawPoints.length < 2) continue;
       const screenPoints = toScreenPoints(rawPoints, scalingParams);
@@ -372,9 +453,8 @@ function buildZonesFromRules(
         points: screenPoints,
         color,
         opacity: zone.opacity,
-        strokeWidth: zone.strokeWidth ?? 8,
+        strokeWidth: (zone.strokeWidth ?? 8) * BAND_WIDTH_SCALE,
       });
-      labelAnchor = labelAnchor ?? midpoint(screenPoints);
     } else {
       rawPoints.forEach((point, i) => {
         const [scaled] = toScreenPoints([point], scalingParams);
@@ -386,15 +466,10 @@ function buildZonesFromRules(
           y: scaled.y,
           color,
           opacity: zone.opacity,
-          radius: zone.radius ?? 8,
+          radius: (zone.radius ?? 8) * MARKER_RADIUS_SCALE,
         });
-        labelAnchor = labelAnchor ?? scaled;
       });
     }
-  }
-
-  if (labelAnchor) {
-    shapes.push(labelNear(`${rule.zones[0]?.key ?? 'zone'}-label`, labelAnchor, rule.label, color));
   }
 
   return shapes;
@@ -415,7 +490,8 @@ export const renderTutorialZones = (
   productType: string | undefined,
   faceMeshData: FaceMeshResult,
   scalingParams: ScalingParams,
-  faceShape: FaceShape | null
+  faceShape: FaceShape | null,
+  hairline: HairlinePoints | null = null
 ): TutorialShape[] => {
   const { landmarks } = scalingParams;
   if (!landmarks || landmarks.length === 0 || !isPlacementCategory(productType) || !faceShape) {
@@ -427,5 +503,5 @@ export const renderTutorialZones = (
   if (!rule) return [];
 
   const newRegions = getNewFacialRegions(landmarks);
-  return buildZonesFromRules(rule, CATEGORY_COLOR[category], faceMeshData.facial_regions ?? null, newRegions, landmarks, scalingParams);
+  return buildZonesFromRules(rule, CATEGORY_COLOR[category], faceMeshData.facial_regions ?? null, newRegions, landmarks, scalingParams, hairline);
 };
