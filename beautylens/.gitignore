@@ -85,3 +85,4 @@ AGENTS.md
 data/sources/
 # Personal scan measurements captured during development.
 data/stability_baseline.json
+firebase-beautylens.json
