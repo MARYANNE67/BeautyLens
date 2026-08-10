@@ -784,11 +784,18 @@ export default function FaceCameraScreen() {
       offsetY = (screenHeight - displayHeight) / 2;
     }
 
-    const scaleX = displayWidth / capturedPhotoSize.width;
-    const scaleY = displayHeight / capturedPhotoSize.height;
-
-    // Re-render overlay with correct scaling for the static photo
+    // Re-render overlay with correct scaling for the static photo.
+    // Landmarks are scaled from the dimensions of the photo they were
+    // DETECTED on (image_dimensions), not the displayed photo's dimensions:
+    // if the final full-res detection failed, the retained landmarks came
+    // from the downscaled polling-loop photo (see
+    // FACE_DETECTION_MAX_DIMENSION), and scaling those by the full-res
+    // photo's size would shrink the overlay into the corner. The aspect
+    // ratios match, so the display math above is unaffected.
     const meshDataToUse = persistentMeshDataRef.current;
+    const landmarkSpace = meshDataToUse?.image_dimensions ?? capturedPhotoSize;
+    const scaleX = displayWidth / landmarkSpace.width;
+    const scaleY = displayHeight / landmarkSpace.height;
     const overlayShapes = meshDataToUse?.landmarks && displayProductTypes.length > 0
       ? displayProductTypes.flatMap((type) => {
           const captureScalingParams = {
