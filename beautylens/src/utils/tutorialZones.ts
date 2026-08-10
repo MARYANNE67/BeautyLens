@@ -279,8 +279,8 @@ export const PLACEMENT_RULES: PlacementRules = {
   concealer: (() => {
     const rule: ShapeCategoryRule = {
       zones: [
-        { key: 'concealer-left-under-eye', kind: 'band', opacity: 0.6, strokeWidth: 10, source: { regionToward: { region: 'left_under_eye', toward: LEFT_MOUTH_CORNER_INDEX, t: 0.18 } } },
-        { key: 'concealer-right-under-eye', kind: 'band', opacity: 0.6, strokeWidth: 10, source: { regionToward: { region: 'right_under_eye', exclude: [6], toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.18 } } },
+        { key: 'concealer-left-under-eye', kind: 'band', opacity: 0.6, strokeWidth: 10, source: { regionToward: { region: 'left_under_eye', toward: LEFT_MOUTH_CORNER_INDEX, t: 0.09 } } },
+        { key: 'concealer-right-under-eye', kind: 'band', opacity: 0.6, strokeWidth: 10, source: { regionToward: { region: 'right_under_eye', exclude: [6], toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.09 } } },
         { key: 'concealer-forehead', kind: 'marker', opacity: 0.5, radius: 8, source: { indices: [FOREHEAD_CENTER_INDEX] } },
         { key: 'concealer-chin', kind: 'marker', opacity: 0.5, radius: 8, source: { indices: [CHIN_BUTTON_INDEX] } },
         { key: 'concealer-nose-bridge', kind: 'marker', opacity: 0.5, radius: 6, source: { indices: [NOSE_BRIDGE_INDEX] } },
@@ -300,8 +300,8 @@ export const PLACEMENT_RULES: PlacementRules = {
         { key: 'highlighter-nose-bridge', kind: 'marker', opacity: 0.6, radius: 6, source: { indices: [NOSE_BRIDGE_INDEX] } },
         { key: 'highlighter-cupids-bow', kind: 'marker', opacity: 0.6, radius: 6, source: { indices: [CUPIDS_BOW_INDEX] } },
         { key: 'highlighter-chin', kind: 'marker', opacity: 0.6, radius: 8, source: { indices: [CHIN_BUTTON_INDEX] } },
-        { key: 'highlighter-left-under-eye', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { regionToward: { region: 'left_under_eye', toward: LEFT_MOUTH_CORNER_INDEX, t: 0.18 } } },
-        { key: 'highlighter-right-under-eye', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { regionToward: { region: 'right_under_eye', exclude: [6], toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.18 } } },
+        { key: 'highlighter-left-under-eye', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { regionToward: { region: 'left_under_eye', toward: LEFT_MOUTH_CORNER_INDEX, t: 0.09 } } },
+        { key: 'highlighter-right-under-eye', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { regionToward: { region: 'right_under_eye', exclude: [6], toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.09 } } },
       ],
       label: "Highlight: cheekbones, nose bridge, cupid's bow, chin, under-eyes",
     },
@@ -337,8 +337,8 @@ export const PLACEMENT_RULES: PlacementRules = {
         { key: 'highlighter-left-cheekbone', kind: 'marker', opacity: 0.65, radius: 9, source: LEFT_CHEEK_MARKER },
         { key: 'highlighter-right-cheekbone', kind: 'marker', opacity: 0.65, radius: 9, source: RIGHT_CHEEK_MARKER },
         { key: 'highlighter-chin', kind: 'marker', opacity: 0.65, radius: 11, source: { indices: [CHIN_BUTTON_INDEX] } },
-        { key: 'highlighter-left-under-eye-wide', kind: 'band', opacity: 0.35, strokeWidth: 8, source: { sequence: [{ regionToward: { region: 'left_under_eye', toward: LEFT_MOUTH_CORNER_INDEX, t: 0.18 } }, { indices: [LEFT_TEMPLE_INDEX] }] } },
-        { key: 'highlighter-right-under-eye-wide', kind: 'band', opacity: 0.35, strokeWidth: 8, source: { sequence: [{ regionToward: { region: 'right_under_eye', exclude: [6], toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.18 } }, { indices: [RIGHT_TEMPLE_INDEX] }] } },
+        { key: 'highlighter-left-under-eye-wide', kind: 'band', opacity: 0.35, strokeWidth: 8, source: { sequence: [{ regionToward: { region: 'left_under_eye', toward: LEFT_MOUTH_CORNER_INDEX, t: 0.09 } }, { indices: [LEFT_TEMPLE_INDEX] }] } },
+        { key: 'highlighter-right-under-eye-wide', kind: 'band', opacity: 0.35, strokeWidth: 8, source: { sequence: [{ regionToward: { region: 'right_under_eye', exclude: [6], toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.09 } }, { indices: [RIGHT_TEMPLE_INDEX] }] } },
       ],
       label: 'Highlight chin + cheekbones; sweep under-eyes toward temples to widen',
     },

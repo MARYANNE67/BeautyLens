@@ -590,7 +590,19 @@ export default function FaceCameraScreen() {
                   const anchor = hairlineAnchors[i];
                   return p && anchor && p.y < anchor.y ? p : null;
                 });
-                setDetectedHairline({ left, center, right });
+                // The temple-side points are only used by symmetric
+                // left/right zone pairs (contour heart, bronzer square). If
+                // exactly one side survives validation, that pair renders
+                // one band to the real hairline and the other to the
+                // landmark fallback -- visibly uneven (reported live).
+                // Symmetry beats one-sided precision here: keep both or
+                // drop both. The center point stays independent.
+                const bothSides = left !== null && right !== null;
+                setDetectedHairline({
+                  left: bothSides ? left : null,
+                  center,
+                  right: bothSides ? right : null,
+                });
               })
               .catch(() => {
                 // Leave detectedHairline null -- tutorialZones.ts already
