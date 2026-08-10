@@ -16,6 +16,12 @@ export const FeatureFlags = {
   // left on here can never affect a production/release build. Default off --
   // flip to true locally when you want to skip auth friction.
   DEV_BYPASS_LOGIN: true,
+  // Adds a "468" toggle on the camera screen that renders every face-mesh
+  // landmark as a dot and lets you tap anywhere to identify the nearest
+  // landmark indices -- for diagnosing overlay-placement bugs with evidence
+  // instead of guessing which landmark is misplaced. AND-ed with __DEV__ at
+  // the call site like DEV_BYPASS_LOGIN above.
+  DEV_LANDMARK_DEBUG: true,
 } as const;
 
 export type FeatureFlagKey = keyof typeof FeatureFlags;

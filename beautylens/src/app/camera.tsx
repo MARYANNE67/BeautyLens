@@ -25,7 +25,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import Svg, { Path, Circle, Text as SvgText } from 'react-native-svg';
+import Svg, { G, Path, Circle, Text as SvgText } from 'react-native-svg';
 import { detectFaceMesh, detectHairline } from '../services/api';
 import { AppConfig } from '../config/featureFlags';
 import { FeatureFlags } from '../config/flags';
@@ -35,6 +35,8 @@ import * as Linking from 'expo-linking';
 import {
   renderDefaultMesh,
   renderClassBasedMesh,
+  scalePoint,
+  type ScalingParams,
   type MeshShape,
   type MeshPolygon,
   type MeshBand,
@@ -144,33 +146,38 @@ function renderShapeElement(
         />
       );
     }
+    // Tutorial bands/markers mark general placement *areas*, not exact
+    // lines/points, so both render as a soft "airbrushed" core-plus-halo
+    // (a wider, fainter layer under the full-opacity one) rather than a
+    // hard-edged stroke or dot. Layered strokes/circles are used instead
+    // of SVG blur filters, which are expensive on the live overlay.
     case 'band': {
       const band = shape as MeshBand;
       if (!band.points || band.points.length < 2) return null;
+      const d = buildOpenPath(band.points);
+      const strokeProps = {
+        d,
+        fill: 'none',
+        stroke: band.color,
+        strokeLinejoin: 'round',
+        strokeLinecap: 'round',
+      } as const;
       return (
-        <Path
-          key={key}
-          d={buildOpenPath(band.points)}
-          fill="none"
-          stroke={band.color}
-          strokeWidth={band.strokeWidth}
-          strokeOpacity={band.opacity}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
+        <G key={key}>
+          <Path {...strokeProps} strokeWidth={band.strokeWidth * 1.8} strokeOpacity={band.opacity * 0.3} />
+          <Path {...strokeProps} strokeWidth={band.strokeWidth} strokeOpacity={band.opacity} />
+        </G>
       );
     }
     case 'marker': {
       const marker = shape as MeshMarker;
+      const circleProps = { cx: marker.x, cy: marker.y, fill: marker.color } as const;
       return (
-        <Circle
-          key={key}
-          cx={marker.x}
-          cy={marker.y}
-          r={marker.radius}
-          fill={marker.color}
-          fillOpacity={marker.opacity}
-        />
+        <G key={key}>
+          <Circle {...circleProps} r={marker.radius * 1.9} fillOpacity={marker.opacity * 0.18} />
+          <Circle {...circleProps} r={marker.radius * 1.45} fillOpacity={marker.opacity * 0.35} />
+          <Circle {...circleProps} r={marker.radius} fillOpacity={marker.opacity} />
+        </G>
       );
     }
     case 'label': {
@@ -285,6 +292,34 @@ export default function FaceCameraScreen() {
   // the landmark-approximated hairline in tutorialZones.ts when null.
   const [detectedHairline, setDetectedHairline] = useState<HairlinePoints | null>(null);
   const hairlineFetchTriggeredRef = useRef(false);
+
+  // Dev-only landmark inspector (see FeatureFlags.DEV_LANDMARK_DEBUG):
+  // renders all 468 landmarks as dots and identifies the nearest landmark
+  // indices on tap -- so placement bugs can be diagnosed from one screenshot
+  // ("that's landmark 234 sitting at eye height") instead of guessing.
+  const debugAvailable = __DEV__ && FeatureFlags.DEV_LANDMARK_DEBUG;
+  const [debugLandmarksOn, setDebugLandmarksOn] = useState(false);
+  const [debugTap, setDebugTap] = useState<{
+    x: number;
+    y: number;
+    hits: { index: number; dist: number; x: number; y: number }[];
+  } | null>(null);
+  const debugScalingRef = useRef<ScalingParams | null>(null);
+  const debugActive = debugAvailable && debugLandmarksOn;
+
+  const handleDebugTap = (tapX: number, tapY: number) => {
+    const meshData = faceMeshData || persistentMeshDataRef.current;
+    const scaling = debugScalingRef.current;
+    if (!meshData?.landmarks?.length || !scaling) return;
+    const hits = meshData.landmarks
+      .map((lm, index) => {
+        const p = scalePoint(lm, scaling.scaleX, scaling.scaleY, scaling.offsetX, scaling.offsetY, scaling.mirrorX, scaling.viewWidth);
+        return { index, dist: Math.hypot(p.x - tapX, p.y - tapY), x: p.x, y: p.y };
+      })
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, 3);
+    setDebugTap({ x: tapX, y: tapY, hits });
+  };
 
 
 
@@ -605,6 +640,7 @@ export default function FaceCameraScreen() {
       offsetY,
       mirrorX,
     };
+    debugScalingRef.current = scalingParams;
 
     let meshShapes: MeshShape[] = [];
     const isDefaultMesh = FeatureFlags.ENABLE_DEFAULT_FACE_MESH;
@@ -619,15 +655,41 @@ export default function FaceCameraScreen() {
       );
     }
 
-    if (!meshShapes || meshShapes.length === 0) {
+    if ((!meshShapes || meshShapes.length === 0) && !debugActive) {
       return null;
     }
 
     if (!isDefaultMesh) {
+      // Extra dev-inspector layers: all 468 landmarks as dots, the measured
+      // hairline points as rings, and rings around the landmarks nearest to
+      // the last tap (identified in the readout chip near the top).
+      const debugDots = debugActive ? renderDefaultMesh(landmarks, scalingParams) : [];
+      const debugHairline = debugActive && detectedHairline
+        ? (['left', 'center', 'right'] as const)
+            .filter((k) => detectedHairline[k] !== null)
+            .map((k) => ({
+              key: k,
+              ...scalePoint(detectedHairline[k]!, scaleX, scaleY, offsetX, offsetY, mirrorX, viewWidth),
+            }))
+        : [];
       return (
         <View style={styles.meshOverlay} pointerEvents="none">
           <Svg style={StyleSheet.absoluteFill} width={viewWidth} height={viewHeight}>
             {meshShapes.map((shape) => renderShapeElement(shape, `live-${shape.key}`, 2, 0.6))}
+            {debugDots.map((p) => (
+              <Circle key={`dbg-${p.key}`} cx={p.x + 1.5} cy={p.y + 1.5} r={1.4} fill="#00FF88" fillOpacity={0.85} />
+            ))}
+            {debugHairline.map((p) => (
+              <Circle key={`dbg-hairline-${p.key}`} cx={p.x} cy={p.y} r={6} fill="none" stroke="#00D4FF" strokeWidth={2} />
+            ))}
+            {debugActive && debugTap && (
+              <G>
+                <Circle cx={debugTap.x} cy={debugTap.y} r={3} fill="#FF3B30" />
+                {debugTap.hits.map((h) => (
+                  <Circle key={`dbg-hit-${h.index}`} cx={h.x} cy={h.y} r={7} fill="none" stroke="#FF3B30" strokeWidth={2} />
+                ))}
+              </G>
+            )}
           </Svg>
         </View>
       );
@@ -832,7 +894,38 @@ export default function FaceCameraScreen() {
               <Text style={styles.statusText}>Waiting for face detection...</Text>
             </View>
           )}
+
+          {debugActive && (
+            <View
+              style={StyleSheet.absoluteFill}
+              onStartShouldSetResponder={() => true}
+              onResponderRelease={(e) =>
+                handleDebugTap(e.nativeEvent.locationX, e.nativeEvent.locationY)
+              }
+            />
+          )}
+
+          {debugActive && debugTap && (
+            <View style={styles.debugInfoChip} pointerEvents="none">
+              <Text style={styles.debugInfoText}>
+                {debugTap.hits.map((h) => `#${h.index} (${Math.round(h.dist)}px)`).join('   ')}
+              </Text>
+            </View>
+          )}
         </View>
+
+        {debugAvailable && (
+          <TouchableOpacity
+            style={[styles.debugToggle, debugLandmarksOn && styles.debugToggleOn]}
+            onPress={() => {
+              setDebugLandmarksOn((v) => !v);
+              setDebugTap(null);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.debugToggleText}>468</Text>
+          </TouchableOpacity>
+        )}
 
         {isCategoryPickerMode && (
           <View style={styles.categoryChipBar}>
@@ -909,6 +1002,43 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
     paddingHorizontal: 20,
+  },
+  debugToggle: {
+    position: 'absolute',
+    top: 56,
+    right: 16,
+    zIndex: 20,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    borderWidth: 1,
+    borderColor: '#00FF88',
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  debugToggleOn: {
+    backgroundColor: 'rgba(0,120,60,0.85)',
+    borderStyle: 'solid',
+  },
+  debugToggleText: {
+    color: '#00FF88',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  debugInfoChip: {
+    position: 'absolute',
+    bottom: 210,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  debugInfoText: {
+    color: '#00FF88',
+    fontSize: 13,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   productName: {
     color: '#fff',
