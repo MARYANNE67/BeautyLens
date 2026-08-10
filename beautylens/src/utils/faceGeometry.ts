@@ -96,6 +96,13 @@ const RIGHT_JAW_WIDTH_INDEX = 397;
 // above, not yet visually verified against a real face in this codebase.
 export const CUPIDS_BOW_INDEX = 0; // already in outer_lip_indices
 export const FOREHEAD_CENTER_INDEX = FACE_TOP_INDEX; // 10
+
+// Center of the chin *button*, verified by annotating the midline chin
+// landmarks (18, 200, 199, 175, 152 top-to-bottom) on a real portrait.
+// Use this for chin placement markers -- CHIN_TIP_INDEX (152) is the
+// face-oval BOTTOM EDGE, so a marker centered there hangs half off the
+// jaw onto the neck (reported live: highlighter "under my chin").
+export const CHIN_BUTTON_INDEX = 199;
 export const CHIN_TIP_INDEX = FACE_BOTTOM_INDEX; // 152
 export const LEFT_MOUTH_CORNER_INDEX = 61; // already in outer_lip_indices
 export const RIGHT_MOUTH_CORNER_INDEX = 291; // already in outer_lip_indices
