@@ -107,20 +107,19 @@ export const CATEGORY_COLOR: Record<PlacementCategory, string> = {
  * all-or-nothing choice per zone, not point-by-point substitution. */
 type PointSource =
   | { region: keyof FacialRegions }
-  | { regionExcludingAt: { region: keyof FacialRegions; exclude: number[] } }
   | { newRegion: keyof NewFacialRegions }
   | { indices: number[] }
   | { sequence: PointSource[] }
   | { interpolate: { a: number; b: number; t: number } }
   | { hairlineOr: { keys: HairlineKey[]; fallback: PointSource } }
-  // Every point of `region` (minus `exclude` positions) slid fraction `t`
-  // toward landmark `toward` -- shifts a whole band face-proportionally
-  // while staying between already-trusted points, the same safety argument
-  // as `interpolate`. Added for the under-eye concealer bands: the
-  // under-eye region landmarks hug the lower lash line, so a soft wide
-  // band anchored there bleeds up over the eye (reported live); sliding
-  // toward the same-side mouth corner drops it into the under-eye hollow.
-  | { regionToward: { region: keyof FacialRegions; exclude?: number[]; toward: number; t: number } };
+  // Every point of `region` slid fraction `t` toward landmark `toward` --
+  // shifts a whole band face-proportionally while staying between
+  // already-trusted points, the same safety argument as `interpolate`.
+  // Added for the under-eye concealer bands: the under-eye region
+  // landmarks hug the lower lash line, so a soft wide band anchored there
+  // bleeds up over the eye (reported live); sliding toward the same-side
+  // mouth corner drops it into the under-eye hollow.
+  | { regionToward: { region: keyof FacialRegions; toward: number; t: number } };
 
 function resolvePoints(
   source: PointSource,
@@ -133,11 +132,6 @@ function resolvePoints(
     return source.sequence.flatMap((s) => resolvePoints(s, facialRegions, newRegions, landmarks, hairline));
   }
   if ('region' in source) return facialRegions?.[source.region] ?? [];
-  if ('regionExcludingAt' in source) {
-    const { region, exclude } = source.regionExcludingAt;
-    const points = facialRegions?.[region] ?? [];
-    return points.filter((_, i) => !exclude.includes(i));
-  }
   if ('newRegion' in source) return newRegions[source.newRegion] ?? [];
   if ('hairlineOr' in source) {
     const { keys, fallback } = source.hairlineOr;
@@ -158,11 +152,10 @@ function resolvePoints(
     }];
   }
   if ('regionToward' in source) {
-    const { region, exclude, toward, t } = source.regionToward;
+    const { region, toward, t } = source.regionToward;
     const target = landmarks[toward];
     if (!target) return [];
     return (facialRegions?.[region] ?? [])
-      .filter((_, i) => !exclude?.includes(i))
       .map((p) => ({
         x: p.x + t * (target.x - p.x),
         y: p.y + t * (target.y - p.y),
@@ -265,22 +258,17 @@ export const PLACEMENT_RULES: PlacementRules = {
   // shape-specific concealer source was found, so this isn't varied per
   // FaceShape the way contour/blush/bronzer/highlighter are.
   //
-  // right_under_eye's index 6 (landmark 447, in src/api/face_mesh.py's
-  // right_under_eye_indices) is a genuine spatial outlier confirmed against
-  // a real face -- its neighbors trace a smooth ~10px-step curve, but this
-  // one point lands ~30px away in both x and y, which reads as an obvious
-  // visual spike when rendered as an open band (a filled polygon, as the
-  // original color-preview concealer uses, hides this kind of jaggedness;
-  // a stroked band doesn't). Filtered out here rather than fixed in
-  // face_mesh.py itself, since that index list is shared with the
-  // unrelated color-preview feature and the correct replacement landmark
-  // isn't verified -- this is a targeted workaround for the tutorial
-  // rendering, not a fix to the underlying data.
+  // (History: these zones used to filter out right_under_eye's index 6 --
+  // landmark 447 -- as a "spatial outlier". The real cause was that
+  // face_mesh.py's right_under_eye_indices tail was off by one relative to
+  // the left list's mirrors; fixed at the source there once the correct
+  // mirror landmarks were verified against a reflected-left-side
+  // comparison on a real portrait, so no client-side filtering remains.)
   concealer: (() => {
     const rule: ShapeCategoryRule = {
       zones: [
         { key: 'concealer-left-under-eye', kind: 'band', opacity: 0.6, strokeWidth: 10, source: { regionToward: { region: 'left_under_eye', toward: LEFT_MOUTH_CORNER_INDEX, t: 0.09 } } },
-        { key: 'concealer-right-under-eye', kind: 'band', opacity: 0.6, strokeWidth: 10, source: { regionToward: { region: 'right_under_eye', exclude: [6], toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.09 } } },
+        { key: 'concealer-right-under-eye', kind: 'band', opacity: 0.6, strokeWidth: 10, source: { regionToward: { region: 'right_under_eye', toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.09 } } },
         { key: 'concealer-forehead', kind: 'marker', opacity: 0.5, radius: 8, source: { indices: [FOREHEAD_CENTER_INDEX] } },
         { key: 'concealer-chin', kind: 'marker', opacity: 0.5, radius: 8, source: { indices: [CHIN_BUTTON_INDEX] } },
         { key: 'concealer-nose-bridge', kind: 'marker', opacity: 0.5, radius: 6, source: { indices: [NOSE_BRIDGE_INDEX] } },
@@ -301,7 +289,7 @@ export const PLACEMENT_RULES: PlacementRules = {
         { key: 'highlighter-cupids-bow', kind: 'marker', opacity: 0.6, radius: 6, source: { indices: [CUPIDS_BOW_INDEX] } },
         { key: 'highlighter-chin', kind: 'marker', opacity: 0.6, radius: 8, source: { indices: [CHIN_BUTTON_INDEX] } },
         { key: 'highlighter-left-under-eye', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { regionToward: { region: 'left_under_eye', toward: LEFT_MOUTH_CORNER_INDEX, t: 0.09 } } },
-        { key: 'highlighter-right-under-eye', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { regionToward: { region: 'right_under_eye', exclude: [6], toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.09 } } },
+        { key: 'highlighter-right-under-eye', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { regionToward: { region: 'right_under_eye', toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.09 } } },
       ],
       label: "Highlight: cheekbones, nose bridge, cupid's bow, chin, under-eyes",
     },
@@ -338,7 +326,7 @@ export const PLACEMENT_RULES: PlacementRules = {
         { key: 'highlighter-right-cheekbone', kind: 'marker', opacity: 0.65, radius: 9, source: RIGHT_CHEEK_MARKER },
         { key: 'highlighter-chin', kind: 'marker', opacity: 0.65, radius: 11, source: { indices: [CHIN_BUTTON_INDEX] } },
         { key: 'highlighter-left-under-eye-wide', kind: 'band', opacity: 0.35, strokeWidth: 8, source: { sequence: [{ regionToward: { region: 'left_under_eye', toward: LEFT_MOUTH_CORNER_INDEX, t: 0.09 } }, { indices: [LEFT_TEMPLE_INDEX] }] } },
-        { key: 'highlighter-right-under-eye-wide', kind: 'band', opacity: 0.35, strokeWidth: 8, source: { sequence: [{ regionToward: { region: 'right_under_eye', exclude: [6], toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.09 } }, { indices: [RIGHT_TEMPLE_INDEX] }] } },
+        { key: 'highlighter-right-under-eye-wide', kind: 'band', opacity: 0.35, strokeWidth: 8, source: { sequence: [{ regionToward: { region: 'right_under_eye', toward: RIGHT_MOUTH_CORNER_INDEX, t: 0.09 } }, { indices: [RIGHT_TEMPLE_INDEX] }] } },
       ],
       label: 'Highlight chin + cheekbones; sweep under-eyes toward temples to widen',
     },

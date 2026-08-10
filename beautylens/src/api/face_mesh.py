@@ -155,7 +155,14 @@ class FaceMeshDetector:
         
         # Under-eye bags (below eyes)
         left_under_eye_indices = [23, 24, 25, 110, 226, 31, 228, 229, 230, 231, 232, 233]
-        right_under_eye_indices = [253, 254, 255, 339, 446, 260, 447, 448, 449, 450, 451, 452]
+        # Position-by-position mirrors of the left list. An earlier version
+        # had the tail off by one (…260, 447, 448…), which put two points
+        # (260, 447) ~25px from the left side's mirrored positions while
+        # every other pair sat within the ~3-7px natural facial-asymmetry
+        # noise floor -- measured by reflecting the left points across the
+        # face midline on a real portrait and comparing. The result was a
+        # visibly uneven left-vs-right under-eye region.
+        right_under_eye_indices = [253, 254, 255, 339, 446, 261, 448, 449, 450, 451, 452, 453]
         
         # Around mouth (perioral region)
         around_mouth_indices = [0, 11, 12, 13, 14, 15, 16, 17, 18, 200, 269, 270, 271, 272, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78]
