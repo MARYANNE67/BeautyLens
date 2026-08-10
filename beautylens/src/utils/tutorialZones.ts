@@ -37,8 +37,10 @@ import {
   getNewFacialRegions,
   type NewFacialRegions,
   type FaceShape,
-  LEFT_CHEEKBONE_INDEX,
-  RIGHT_CHEEKBONE_INDEX,
+  LEFT_CHEEK_INDEX,
+  RIGHT_CHEEK_INDEX,
+  LEFT_CHEEK_HOLLOW_INDEX,
+  RIGHT_CHEEK_HOLLOW_INDEX,
   LEFT_TEMPLE_INDEX,
   RIGHT_TEMPLE_INDEX,
   LEFT_MOUTH_CORNER_INDEX,
@@ -166,21 +168,19 @@ interface ShapeCategoryRule {
 
 type PlacementRules = Record<PlacementCategory, Record<FaceShape, ShapeCategoryRule>>;
 
-// LEFT_CHEEKBONE_INDEX/RIGHT_CHEEKBONE_INDEX (234/454) is the community-
-// standard "cheek width" landmark, and traced correctly on a static test
-// photo (~31px below eye level, not up at eye level) -- but on live camera
-// captures it consistently rendered up near eye-corner height instead of
-// true cheek height, confirmed on the same face both with and without
-// glasses (so a live-tracking accuracy issue for this landmark, not a
-// glasses-specific one). Nudging it 30% of the way toward the mouth corner
-// brings it down into more plausible cheek territory. Reuses the existing
-// `interpolate` mechanism -- low risk, since interpolating between two
-// already-on-face points can't send it flying off the face the way the
-// earlier glabella-extrapolation attempt did (see the removed
-// towardHairline() history above). A best-effort correction based on
-// visual reports, not a verified fix -- the 0.3 fraction may need retuning.
-const LEFT_CHEEK_MARKER: PointSource = { interpolate: { a: LEFT_CHEEKBONE_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.3 } };
-const RIGHT_CHEEK_MARKER: PointSource = { interpolate: { a: RIGHT_CHEEKBONE_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.3 } };
+// Cheek anchors. An earlier version anchored these to LEFT_CHEEKBONE_INDEX/
+// RIGHT_CHEEKBONE_INDEX (234/454) -- the standard face-*width* landmarks --
+// which sit on the silhouette edge at eye-corner height, so every cheek
+// marker rendered "near the eye" (reported live, then confirmed by
+// annotating 234/454 on a real portrait). A 30%-toward-mouth-corner
+// interpolation hack partially compensated; replaced outright with the
+// interior cheek-surface landmarks verified in faceGeometry.ts:
+// 50/280 = apple / top of cheekbone (markers, upward blend bands),
+// 205/425 = contour hollow under the cheekbone (hollow bands, sweeps).
+const LEFT_CHEEK_MARKER: PointSource = { indices: [LEFT_CHEEK_INDEX] };
+const RIGHT_CHEEK_MARKER: PointSource = { indices: [RIGHT_CHEEK_INDEX] };
+const LEFT_HOLLOW: PointSource = { indices: [LEFT_CHEEK_HOLLOW_INDEX] };
+const RIGHT_HOLLOW: PointSource = { indices: [RIGHT_CHEEK_HOLLOW_INDEX] };
 
 // --- Placement rules table ----------------------------------------------
 //
@@ -200,23 +200,23 @@ export const PLACEMENT_RULES: PlacementRules = {
   contour: {
     oval: {
       zones: [
-        { key: 'contour-left-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [LEFT_CHEEK_MARKER, { interpolate: { a: LEFT_CHEEKBONE_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
-        { key: 'contour-right-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [RIGHT_CHEEK_MARKER, { interpolate: { a: RIGHT_CHEEKBONE_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'contour-left-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [LEFT_HOLLOW, { interpolate: { a: LEFT_CHEEK_HOLLOW_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'contour-right-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [RIGHT_HOLLOW, { interpolate: { a: RIGHT_CHEEK_HOLLOW_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
       ],
       label: 'Light contour along the cheek hollows',
     },
     round: {
       zones: [
         { key: 'contour-jawline', kind: 'band', opacity: 0.5, strokeWidth: 8, source: { newRegion: 'jawline' } },
-        { key: 'contour-left-hollow', kind: 'band', opacity: 0.55, strokeWidth: 10, source: { sequence: [LEFT_CHEEK_MARKER, { interpolate: { a: LEFT_CHEEKBONE_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
-        { key: 'contour-right-hollow', kind: 'band', opacity: 0.55, strokeWidth: 10, source: { sequence: [RIGHT_CHEEK_MARKER, { interpolate: { a: RIGHT_CHEEKBONE_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'contour-left-hollow', kind: 'band', opacity: 0.55, strokeWidth: 10, source: { sequence: [LEFT_HOLLOW, { interpolate: { a: LEFT_CHEEK_HOLLOW_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'contour-right-hollow', kind: 'band', opacity: 0.55, strokeWidth: 10, source: { sequence: [RIGHT_HOLLOW, { interpolate: { a: RIGHT_CHEEK_HOLLOW_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
       ],
       label: 'Contour jaw + cheek hollows to add definition',
     },
     square: {
       zones: [
-        { key: 'contour-left-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [LEFT_CHEEK_MARKER, { interpolate: { a: LEFT_CHEEKBONE_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
-        { key: 'contour-right-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [RIGHT_CHEEK_MARKER, { interpolate: { a: RIGHT_CHEEKBONE_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'contour-left-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [LEFT_HOLLOW, { interpolate: { a: LEFT_CHEEK_HOLLOW_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'contour-right-hollow', kind: 'band', opacity: 0.4, strokeWidth: 8, source: { sequence: [RIGHT_HOLLOW, { interpolate: { a: RIGHT_CHEEK_HOLLOW_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
         { key: 'contour-left-temple', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, { indices: [LEFT_JAW_CORNER_INDEX] }] } },
         { key: 'contour-right-temple', kind: 'band', opacity: 0.3, strokeWidth: 6, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, { indices: [RIGHT_JAW_CORNER_INDEX] }] } },
       ],
@@ -367,8 +367,8 @@ export const PLACEMENT_RULES: PlacementRules = {
   bronzer: {
     oval: {
       zones: [
-        { key: 'bronzer-left-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, LEFT_CHEEK_MARKER, { indices: [LEFT_JAW_CORNER_INDEX] }] } },
-        { key: 'bronzer-right-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, RIGHT_CHEEK_MARKER, { indices: [RIGHT_JAW_CORNER_INDEX] }] } },
+        { key: 'bronzer-left-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, LEFT_HOLLOW, { indices: [LEFT_JAW_CORNER_INDEX] }] } },
+        { key: 'bronzer-right-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, RIGHT_HOLLOW, { indices: [RIGHT_JAW_CORNER_INDEX] }] } },
       ],
       label: 'Bronzer: light sweep from temple, under the cheekbone, to the jaw',
     },
@@ -392,16 +392,16 @@ export const PLACEMENT_RULES: PlacementRules = {
     // 3-point sweep (temple / cheek hollow / jaw) rather than inventing one.
     heart: {
       zones: [
-        { key: 'bronzer-left-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, LEFT_CHEEK_MARKER, { indices: [LEFT_JAW_CORNER_INDEX] }] } },
-        { key: 'bronzer-right-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, RIGHT_CHEEK_MARKER, { indices: [RIGHT_JAW_CORNER_INDEX] }] } },
+        { key: 'bronzer-left-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [LEFT_TEMPLE_INDEX] }, LEFT_HOLLOW, { indices: [LEFT_JAW_CORNER_INDEX] }] } },
+        { key: 'bronzer-right-sweep', kind: 'band', opacity: 0.45, strokeWidth: 12, source: { sequence: [{ indices: [RIGHT_TEMPLE_INDEX] }, RIGHT_HOLLOW, { indices: [RIGHT_JAW_CORNER_INDEX] }] } },
       ],
       label: 'Bronzer: general sweep — temple, cheek hollow, jaw',
     },
     long: {
       zones: [
         { key: 'bronzer-forehead', kind: 'band', opacity: 0.48, strokeWidth: 12, source: { hairlineOr: { keys: ['left', 'center', 'right'], fallback: { newRegion: 'forehead' } } } },
-        { key: 'bronzer-left-hollow', kind: 'band', opacity: 0.48, strokeWidth: 10, source: { sequence: [LEFT_CHEEK_MARKER, { interpolate: { a: LEFT_CHEEKBONE_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
-        { key: 'bronzer-right-hollow', kind: 'band', opacity: 0.48, strokeWidth: 10, source: { sequence: [RIGHT_CHEEK_MARKER, { interpolate: { a: RIGHT_CHEEKBONE_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'bronzer-left-hollow', kind: 'band', opacity: 0.48, strokeWidth: 10, source: { sequence: [LEFT_HOLLOW, { interpolate: { a: LEFT_CHEEK_HOLLOW_INDEX, b: LEFT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
+        { key: 'bronzer-right-hollow', kind: 'band', opacity: 0.48, strokeWidth: 10, source: { sequence: [RIGHT_HOLLOW, { interpolate: { a: RIGHT_CHEEK_HOLLOW_INDEX, b: RIGHT_MOUTH_CORNER_INDEX, t: 0.55 } }] } },
         { key: 'bronzer-jawline', kind: 'band', opacity: 0.48, strokeWidth: 10, source: { newRegion: 'jawline' } },
         { key: 'bronzer-chin', kind: 'band', opacity: 0.48, strokeWidth: 8, source: { newRegion: 'chin' } },
       ],

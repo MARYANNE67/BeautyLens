@@ -57,10 +57,28 @@ export const LEFT_FOREHEAD_SIDE_INDICES = [127, 162, 21];
 export const RIGHT_FOREHEAD_SIDE_INDICES = [356, 389, 251];
 
 // Widest point of the face oval -- the standard MediaPipe proxy for
-// zygomatic/cheekbone width. Single points (not a filled region): there's
-// no validated interior cheek landmark set to build a polygon from yet.
+// zygomatic/cheekbone width. Correct for *measuring* face width (see
+// classifyFaceShape below), but wrong as a "cheek" placement anchor: these
+// sit on the silhouette edge next to the ear at eye-corner height
+// (verified by annotating them on a real portrait -- they hug the outer
+// eye corner, matching live reports of cheek markers landing "near the
+// eye"). Use the interior cheek anchors below for placement instead.
 export const LEFT_CHEEKBONE_INDEX = 234;
 export const RIGHT_CHEEKBONE_INDEX = 454;
+
+// Interior cheek-surface anchors, chosen by annotating candidate indices
+// (50/280, 205/425, 101/330, 187/411, 117/346) on a real portrait via the
+// backend's own face-mesh detector and picking visually:
+//  - 50/280 sit squarely on the cheek body below the eye -- the
+//    "apple / top of cheekbone" spot for highlighter and blush.
+//  - 205/425 sit slightly lower and more outward -- the contour hollow
+//    under the cheekbone, for contour and bronzer sweeps.
+// Rejected: 117/346 (under-eye height, too high), 101/330 (too close to
+// the nose), 187/411 (too low, near the jaw).
+export const LEFT_CHEEK_INDEX = 50;
+export const RIGHT_CHEEK_INDEX = 280;
+export const LEFT_CHEEK_HOLLOW_INDEX = 205;
+export const RIGHT_CHEEK_HOLLOW_INDEX = 425;
 
 // Landmark used as "top of face" for length measurement (forehead/hairline centre).
 const FACE_TOP_INDEX = 10;
