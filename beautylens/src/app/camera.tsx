@@ -43,7 +43,8 @@ import {
   type MeshMarker,
   type MeshLabel,
 } from '../utils/meshOverlays';
-import { renderTutorialZones, isPlacementCategory, type HairlinePoints } from '../utils/tutorialZones';
+import { renderTutorialZones, isPlacementCategory, CATEGORY_COLOR, type HairlinePoints } from '../utils/tutorialZones';
+import { Ionicons } from '@expo/vector-icons';
 import {
   classifyFaceShape,
   type FaceShape,
@@ -69,7 +70,12 @@ const FACE_CAPTURE_QUALITY = 0.45;
 const FACE_DETECTION_MAX_DIMENSION = 480;
 // How long to keep sampling the face shape after a face is first detected,
 // before locking it in and stopping further classification for the session.
-const FACE_SHAPE_LEARNING_DURATION_MS = 5000;
+// The window exists to ride out noisy early frames (mid-movement, partial
+// face), not to gather a fixed sample count -- so when the first few
+// samples all agree, waiting out the rest of the window adds nothing.
+const FACE_SHAPE_LEARNING_DURATION_MS = 2500;
+// Lock immediately once this many samples unanimously agree.
+const FACE_SHAPE_EARLY_LOCK_SAMPLES = 4;
 
 function mostFrequentFaceShape(samples: FaceShape[]): FaceShape {
   const counts = new Map<FaceShape, number>();
@@ -95,16 +101,27 @@ const FACE_SHAPE_LABEL: Record<FaceShape, string> = {
   long: 'Long',
 };
 
-// Shown as a bottom chip bar when the screen is reached with no product info
-// at all (the "Tutorial" shortcut on the scan screen) -- lets you toggle
-// which placement categories' zones are drawn, live, without leaving the camera.
-const PLACEMENT_CATEGORY_CHIPS: { key: string; label: string }[] = [
-  { key: 'contour', label: 'Contour' },
-  { key: 'concealer', label: 'Concealer' },
-  { key: 'highlighter', label: 'Highlighter' },
-  { key: 'blush', label: 'Blush' },
-  { key: 'bronzer', label: 'Bronzer' },
+// Shown as a bottom button bar when the screen is reached with no product
+// info at all (the "Tutorial" shortcut on the scan screen) -- lets you
+// toggle which placement categories' zones are drawn, live, without leaving
+// the camera. Rendered as circular icon buttons (easier tap targets than
+// word chips) tinted with the same CATEGORY_COLOR the overlay draws in;
+// `selectedIconColor` is picked per swatch for contrast against that fill
+// (dark icons on the light fills, white on the darker ones).
+const PLACEMENT_CATEGORY_CHIPS: {
+  key: string;
+  label: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  color: string;
+  selectedIconColor: string;
+}[] = [
+  { key: 'contour', label: 'Contour', icon: 'brush', color: CATEGORY_COLOR.contour, selectedIconColor: '#fff' },
+  { key: 'concealer', label: 'Concealer', icon: 'eye', color: CATEGORY_COLOR.concealer, selectedIconColor: '#6B4A2F' },
+  { key: 'highlighter', label: 'Highlighter', icon: 'sparkles', color: CATEGORY_COLOR.highlighter, selectedIconColor: '#6B5B1E' },
+  { key: 'blush', label: 'Blush', icon: 'flower', color: CATEGORY_COLOR.blush, selectedIconColor: '#fff' },
+  { key: 'bronzer', label: 'Bronzer', icon: 'sunny', color: CATEGORY_COLOR.bronzer, selectedIconColor: '#fff' },
 ];
+const ALL_CHIP_COLOR = '#C2185B';
 
 const buildClosedPath = (points: { x: number; y: number }[]) =>
   points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ') + ' Z';
@@ -532,9 +549,13 @@ export default function FaceCameraScreen() {
               faceShapeSamplesRef.current.push(sampledShape);
             }
 
+            const samples = faceShapeSamplesRef.current;
             const elapsed = Date.now() - faceShapeLearningStartedAtRef.current;
-            if (elapsed >= FACE_SHAPE_LEARNING_DURATION_MS && faceShapeSamplesRef.current.length > 0) {
-              const lockedShape = mostFrequentFaceShape(faceShapeSamplesRef.current);
+            const unanimous =
+              samples.length >= FACE_SHAPE_EARLY_LOCK_SAMPLES &&
+              samples.every((s) => s === samples[0]);
+            if (unanimous || (elapsed >= FACE_SHAPE_LEARNING_DURATION_MS && samples.length > 0)) {
+              const lockedShape = mostFrequentFaceShape(samples);
               detectedFaceShapeRef.current = lockedShape;
               setDetectedFaceShape(lockedShape);
             }
@@ -956,26 +977,44 @@ export default function FaceCameraScreen() {
               contentContainerStyle={styles.categoryChipBarContent}
             >
               <TouchableOpacity
-                style={[styles.categoryChip, allCategoriesSelected && styles.categoryChipSelected]}
+                style={styles.categoryCircleWrap}
                 onPress={toggleAllCategories}
                 activeOpacity={0.85}
               >
-                <Text style={[styles.categoryChipText, allCategoriesSelected && styles.categoryChipTextSelected]}>
-                  All
-                </Text>
+                <View
+                  style={[
+                    styles.categoryCircle,
+                    { borderColor: ALL_CHIP_COLOR },
+                    allCategoriesSelected && { backgroundColor: ALL_CHIP_COLOR },
+                  ]}
+                >
+                  <Ionicons name="apps" size={22} color={allCategoriesSelected ? '#fff' : ALL_CHIP_COLOR} />
+                </View>
+                <Text style={styles.categoryCircleLabel}>All</Text>
               </TouchableOpacity>
               {PLACEMENT_CATEGORY_CHIPS.map((category) => {
                 const isSelected = activeCategories.includes(category.key);
                 return (
                   <TouchableOpacity
                     key={category.key}
-                    style={[styles.categoryChip, isSelected && styles.categoryChipSelected]}
+                    style={styles.categoryCircleWrap}
                     onPress={() => toggleCategory(category.key)}
                     activeOpacity={0.85}
                   >
-                    <Text style={[styles.categoryChipText, isSelected && styles.categoryChipTextSelected]}>
-                      {category.label}
-                    </Text>
+                    <View
+                      style={[
+                        styles.categoryCircle,
+                        { borderColor: category.color },
+                        isSelected && { backgroundColor: category.color },
+                      ]}
+                    >
+                      <Ionicons
+                        name={category.icon}
+                        size={22}
+                        color={isSelected ? category.selectedIconColor : category.color}
+                      />
+                    </View>
+                    <Text style={styles.categoryCircleLabel}>{category.label}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -1104,22 +1143,27 @@ const styles = StyleSheet.create({
   },
   categoryChipBarContent: {
     paddingHorizontal: 16,
-    gap: 8,
+    gap: 12,
   },
-  categoryChip: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  categoryCircleWrap: {
+    alignItems: 'center',
+    width: 58,
+  },
+  categoryCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  categoryChipSelected: {
-    borderColor: '#C2185B',
-    backgroundColor: 'rgba(194,24,91,0.4)',
+  categoryCircleLabel: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 4,
   },
-  categoryChipText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  categoryChipTextSelected: { color: '#fff' },
   controls: {
     flexDirection: 'row',
     justifyContent: 'space-around',
