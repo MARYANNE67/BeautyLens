@@ -542,11 +542,12 @@ export default function FaceCameraScreen() {
 
           if (!hairlineFetchTriggeredRef.current) {
             hairlineFetchTriggeredRef.current = true;
-            const xPositions = [
+            const hairlineAnchors = [
               LEFT_TEMPLE_INDEX,
               FOREHEAD_CENTER_INDEX,
               RIGHT_TEMPLE_INDEX,
-            ].map((i) => result.landmarks[i]?.x ?? 0);
+            ].map((i) => result.landmarks[i]);
+            const xPositions = hairlineAnchors.map((a) => a?.x ?? 0);
 
             // Fire-and-forget: this is a one-time-per-session lookup, not
             // part of the regular detection loop, so it shouldn't block or
@@ -554,7 +555,20 @@ export default function FaceCameraScreen() {
             detectHairline(API_BASE_URL, detectionPhoto.uri, xPositions)
               .then((hairlineResult) => {
                 if (hairlineResult.status !== 'success') return;
-                const [left, center, right] = hairlineResult.points;
+                // Reject any point that isn't ABOVE the landmark whose x it
+                // was sampled at. When hair fully covers a temple-side
+                // forehead column, the scan's "first sustained face-skin run"
+                // in that column is the CHEEK -- a real skin boundary, just
+                // not the hairline (confirmed live via the landmark
+                // inspector: a "hairline" point ringed at cheek height, which
+                // stretched the heart-shape contour band down the cheek).
+                // A rejected point becomes null, which tutorialZones.ts
+                // already handles by falling back to the landmark
+                // approximation for that zone.
+                const [left, center, right] = hairlineResult.points.map((p, i) => {
+                  const anchor = hairlineAnchors[i];
+                  return p && anchor && p.y < anchor.y ? p : null;
+                });
                 setDetectedHairline({ left, center, right });
               })
               .catch(() => {
