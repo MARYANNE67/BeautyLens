@@ -8,7 +8,6 @@ No network calls — extract_text_from_image_region is tested via mocking.
 import pytest
 from src.api.product_recognition import parse_product_from_text
 
-
 # ── Brand detection from text ─────────────────────────────────────────────────
 
 class TestBrandDetection:

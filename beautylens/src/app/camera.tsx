@@ -1,16 +1,21 @@
 /**
- * Face Camera Screen with AR Mesh Overlay
- * Front-facing camera interface that detects face mesh landmarks using
- * MediaPipe and renders product-specific AR overlays (lipstick, eyeshadow,
- * foundation, etc.)
+ * Face Camera Screen with AR Makeup Overlay
  *
- * Ported faithfully from the original mobile/screens/FaceCameraScreen.js
- * (sea710 reference repo) — same letterbox/pillarbox aspect-ratio scaling,
- * same persistent-mesh-data pattern to prevent overlay blinking, same
- * delegation to renderClassBasedMesh() in utils/meshOverlays.ts.
+ * Two rendering paths are supported, toggled by FeatureFlags.ENABLE_OPENMAKEUP_SDK:
+ *
+ *  A) OpenMakeupSDK path (new — realistic 3D makeup)
+ *     Embeds a WebView that runs OpenMakeupSDK — MediaPipe FaceMesh + Three.js
+ *     WebGL shaders with matte / shimmer / glossy / glitter material finishes.
+ *     The SDK accesses the camera itself inside the WebView.
+ *     See: src/components/ARMakeupWebView.tsx
+ *
+ *  B) Legacy path (Python API → SVG polygon overlay)
+ *     Captures a photo every 500 ms, sends it to the Python backend, gets back
+ *     468-landmark face-mesh data, and draws flat SVG polygons per product.
+ *     Kept as a reliable offline fallback.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -18,8 +23,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
-  Image
+  Image,
+  Alert,
+  ScrollView,
+  Platform,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -37,11 +46,442 @@ import {
 } from '../utils/meshOverlays';
 import type { FaceMeshResult, ImageShape } from '../types';
 
+// ── OpenMakeupSDK WebView (path A) ───────────────────────────────────────────
+import ARMakeupWebView, {
+  resolveLayer,
+  type ARMakeupWebViewRef,
+  type MakeupLayer,
+  type ColorExtractResult,
+} from '../components/ARMakeupWebView';
+
 const API_BASE_URL = __DEV__ ? AppConfig.API_BASE_URL_DEV : AppConfig.API_BASE_URL_PROD;
 const FACE_DETECTION_INTERVAL = 500;
 const FACE_CAPTURE_QUALITY = 0.45;
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Path A — OpenMakeupSDK screen (realistic 3D AR via WebView)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Map a shade name (or direct hex string) to a #rrggbb hex colour.
+ * Tries in order: (1) literal hex, (2) keyword matching against a makeup
+ * colour vocabulary.  Returns null if nothing matches.
+ */
+function shadeToHex(shade: string | undefined): string | null {
+  if (!shade) return null;
+
+  // 1 — literal hex embedded anywhere in the string
+  const m = shade.match(/#?([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})\b/);
+  if (m) {
+    const h = m[1];
+    return '#' + (h.length === 3 ? h.split('').map((c) => c + c).join('') : h);
+  }
+
+  const s = shade.toLowerCase();
+
+  // 2 — keyword → hex (common makeup shade vocabulary)
+  const MAP: [string[], string][] = [
+    // Reds
+    [['red','scarlet','ruby','cherry','crimson','fire','flame','lava','bordeaux','cardinal'],'#C62828'],
+    // Vivid pinks
+    [['hot pink','fuchsia','magenta','punch','shock','electric pink'],'#E91E8C'],
+    // Soft pinks
+    [['pink','rose','rosé','petal','ballet','blush pink','bubblegum','candy','watermelon'],'#E8628A'],
+    // Corals & peaches
+    [['coral','peach','apricot','melon','cantaloupe','tangerine','papaya'],'#FF7043'],
+    // Berries / plums
+    [['berry','plum','blackberry','mulberry','boysenberry','fig','currant','raisin'],'#7B2D48'],
+    // Wines / burgundies
+    [['wine','burgundy','merlot','cabernet','maroon','oxblood','sangria'],'#722F37'],
+    // Mauves
+    [['mauve','dusty rose','antique rose','smoky rose','rosewood'],'#A05070'],
+    // Purples
+    [['purple','violet','amethyst','orchid','grape','lavender','lilac','wisteria'],'#7B1FA2'],
+    // Nudes / neutrals
+    [['nude','naked','natural','bare','barely there','skin','flesh','porcelain'],'#C8956C'],
+    [['beige','sand','wheat','bisque','champagne','linen','ivory'],'#D4A574'],
+    // Browns & taupes
+    [['brown','chocolate','espresso','mocha','coffee','cocoa','java'],'#795548'],
+    [['taupe','mushroom','khaki','stone','greige','warm nude'],'#A0887C'],
+    // Terracotta / bronze
+    [['bronze','copper','terra','terracotta','sienna','rust','brick'],'#A0522D'],
+    [['caramel','honey','toffee','amber','butterscotch','golden'],'#C68642'],
+    // Darks / smoky
+    [['black','onyx','jet','midnight','dark','smoky','charcoal','graphite','coal'],'#1A1A1A'],
+    // Oranges
+    [['orange','pumpkin','paprika'],'#E64A19'],
+    // Golds / metallics
+    [['gold','shimmer','glitter','metallic','mirror'],'#F0C040'],
+  ];
+
+  for (const [keywords, hex] of MAP) {
+    if (keywords.some((kw) => s.includes(kw))) return hex;
+  }
+  return null;
+}
+
+/** All toggleable makeup categories shown in the bottom palette */
+const PALETTE_ITEMS: { category: string; label: string; color: string }[] = [
+  { category: 'lipstick',   label: '💋 Lip',       color: '#C2185B' },
+  { category: 'eyeshadow',  label: '👁 Shadow',     color: '#7B1FA2' },
+  { category: 'eyeliner',   label: '✏ Liner',      color: '#1A237E' },
+  { category: 'mascara',    label: '✦ Mascara',    color: '#37474F' },
+  { category: 'blush',      label: '🌸 Blush',     color: '#C2185B' },
+  { category: 'foundation', label: '✨ Base',       color: '#A1887F' },
+];
+
+function OpenMakeupScreen() {
+  const router = useRouter();
+  const { productType, productTypes, productImageUrl, productImageUrls, shade, brand, resolvedColor } =
+    useLocalSearchParams<{
+      productType?: string;
+      productTypes?: string;
+      productImageUrl?: string;
+      productImageUrls?: string;  // JSON array of image URLs, one per product
+      shade?: string;             // shade name e.g. "Ruby Red", "Coral Kiss"
+      brand?: string;
+      resolvedColor?: string;     // hex confirmed by user on the tryon screen — wins over everything
+    }>();
+
+  // ── 1. Stable list of product type strings ─────────────────────────────────
+  const productTypeList = React.useMemo(() => {
+    const types: string[] = [];
+    if (productTypes) {
+      try {
+        const parsed = JSON.parse(productTypes);
+        if (Array.isArray(parsed)) parsed.forEach((t) => typeof t === 'string' && types.push(t));
+      } catch { /* ignore */ }
+    }
+    if (types.length === 0 && productType) types.push(productType);
+    return types;
+  }, [productType, productTypes]);
+
+  // ── 2. colorMap: category → hex colour extracted from the product image ─────
+  //    Falls back to resolveLayer() defaults until extraction completes.
+  const [colorMap, setColorMap] = useState<Record<string, string>>({});
+
+  // ── 3. Layers: merge base defaults with any extracted colours ───────────────
+  const layers: MakeupLayer[] = React.useMemo(
+    () =>
+      productTypeList
+        .map((t) => {
+          const base = resolveLayer(t);
+          if (!base) return null;
+          return { ...base, color: colorMap[base.category] ?? base.color };
+        })
+        .filter((l): l is MakeupLayer => l !== null),
+    [productTypeList, colorMap]
+  );
+
+  const webViewRef = useRef<ARMakeupWebViewRef>(null);
+  const [sdkReady, setSdkReady] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Tracks which categories are currently toggled on in the palette
+  const [activeCategories, setActiveCategories] = useState<Set<string>>(
+    () => new Set(productTypeList.map((t) => resolveLayer(t)?.category).filter(Boolean) as string[])
+  );
+
+  // ── 4a. User-confirmed colour from the tryon shade picker (highest priority) ──
+  //  resolvedColor is the hex the user explicitly chose on the tryon screen.
+  //  It wins over both shade-name parsing AND image extraction.
+  const shadeDerivedRef = useRef<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    if (!resolvedColor || productTypeList.length === 0) return;
+    const primary = resolveLayer(productTypeList[0]);
+    if (primary) {
+      shadeDerivedRef.current.add(primary.category);
+      setColorMap((prev) => ({ ...prev, [primary.category]: resolvedColor }));
+    }
+  }, [resolvedColor, productTypeList]);
+
+  // ── 4b. Fallback: resolve shade name → hex if no resolvedColor ─────────────
+  React.useEffect(() => {
+    if (resolvedColor) return; // already handled above
+    const hex = shadeToHex(shade);
+    if (!hex || productTypeList.length === 0) return;
+    const updates: Record<string, string> = {};
+    const primary = resolveLayer(productTypeList[0]);
+    if (primary) {
+      updates[primary.category] = hex;
+      shadeDerivedRef.current.add(primary.category); // protect from image override
+    }
+    if (Object.keys(updates).length > 0) {
+      setColorMap((prev) => ({ ...prev, ...updates }));
+    }
+  }, [shade, productTypeList]);
+
+  // ── 4. Ref to always-current activeCategories (avoids stale closure in callbacks)
+  const activeCategoriesRef = useRef(activeCategories);
+  activeCategoriesRef.current = activeCategories;
+
+  // ── 5. Called when AR is ready — fetch images from RN side then extract colour
+  //
+  // Why fetch here rather than in the WebView?
+  // The WebView's origin is cdn.jsdelivr.net, so any image from a different host
+  // (your API, S3, etc.) is blocked by CORS when canvas.getImageData() is called.
+  // React Native's fetch() has no CORS restriction, so we download each image,
+  // encode it as a base64 data: URL, and hand *that* to the WebView canvas —
+  // data: URLs are same-origin and never blocked.
+  const handleReady = useCallback(() => {
+    setSdkReady(true);
+
+    // If the user already confirmed a shade on the tryon screen, skip image
+    // extraction entirely — it would only risk overwriting the correct colour
+    // with whatever the product packaging happens to look like.
+    if (resolvedColor) return;
+
+    const imageUrls: string[] = [];
+    if (productImageUrls) {
+      try {
+        const parsed = JSON.parse(productImageUrls);
+        if (Array.isArray(parsed)) imageUrls.push(...parsed.filter((u): u is string => typeof u === 'string'));
+      } catch { /* ignore */ }
+    }
+    if (imageUrls.length === 0 && productImageUrl) imageUrls.push(productImageUrl);
+    if (imageUrls.length === 0) return;
+
+    (async () => {
+      const items: { category: string; url: string }[] = [];
+
+      await Promise.all(
+        imageUrls.map(async (url, i) => {
+          const type = productTypeList[i] ?? productTypeList[0];
+          const base = type ? resolveLayer(type) : null;
+          if (!base) return;
+
+          let dataUrl = url; // fallback — canvas sampling will likely fail due to CORS
+          try {
+            const cacheDir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? '';
+            const localPath = cacheDir + 'color_extract_' + i + '.jpg';
+            const dl = await FileSystem.downloadAsync(url, localPath);
+            if (dl.status === 200) {
+              const b64 = await FileSystem.readAsStringAsync(localPath, { encoding: 'base64' });
+              dataUrl = 'data:image/jpeg;base64,' + b64;
+            }
+          } catch (e) {
+            console.warn('[ColorExtract] download failed, using raw URL:', e);
+          }
+
+          items.push({ category: base.category, url: dataUrl });
+        })
+      );
+
+      if (items.length > 0) {
+        webViewRef.current?.extractColors(items);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productImageUrl, productImageUrls, productTypeList, resolvedColor]);
+
+  // ── 6. Receive extracted colours from the WebView ───────────────────────────
+  const handleColorsExtracted = useCallback((results: ColorExtractResult[]) => {
+    const updates: Record<string, string> = {};
+    results.forEach(({ category, color }) => {
+      // Never let image extraction overwrite a shade-name-derived colour.
+      // Product packaging images are often a different colour from the actual
+      // shade (e.g. a pink-labelled bottle has dark branding on it), so the
+      // shade name text is always the more reliable signal.
+      if (color && !shadeDerivedRef.current.has(category)) {
+        updates[category] = color;
+      }
+    });
+    if (Object.keys(updates).length === 0) return;
+
+    setColorMap((prev) => ({ ...prev, ...updates }));
+
+    // Re-apply only layers that are currently toggled on
+    Object.entries(updates).forEach(([category, color]) => {
+      if (activeCategoriesRef.current.has(category)) {
+        const base = resolveLayer(category);
+        if (base) webViewRef.current?.apply({ ...base, color });
+      }
+    });
+  }, []);
+
+  const toggleLayer = useCallback(
+    (category: string) => {
+      setActiveCategories((prev) => {
+        const next = new Set(prev);
+        if (next.has(category)) {
+          next.delete(category);
+          webViewRef.current?.clear(category);
+        } else {
+          next.add(category);
+          const base = resolveLayer(category);
+          if (base) {
+            // Use extracted colour if available, otherwise keep default
+            const color = colorMap[category] ?? base.color;
+            webViewRef.current?.apply({ ...base, color });
+          }
+        }
+        return next;
+      });
+    },
+    [colorMap]
+  );
+
+  const handleCapture = useCallback(() => {
+    webViewRef.current?.capture();
+  }, []);
+
+  const handleCaptured = useCallback((base64DataUrl: string) => {
+    setCapturedImage(base64DataUrl);
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!capturedImage || isSaving) return;
+    setIsSaving(true);
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') { Linking.openSettings(); return; }
+
+      // base64 data URL → temp file via expo-file-system
+      const base64 = capturedImage.replace(/^data:image\/\w+;base64,/, '');
+      const dir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? '';
+      const fileUri = dir + `beautylens_${Date.now()}.jpg`;
+      await FileSystem.writeAsStringAsync(fileUri, base64, {
+        encoding: 'base64',
+      });
+      const asset = await MediaLibrary.createAssetAsync(fileUri);
+      await MediaLibrary.createAlbumAsync('BeautyLens', asset, false);
+      Alert.alert('Saved! 💄', 'Look saved to your BeautyLens album.');
+    } catch (err) {
+      console.error('[OpenMakeupScreen] Save error:', err);
+      Alert.alert('Error', 'Could not save the photo. Try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [capturedImage, isSaving]);
+
+  const handleRetake = useCallback(() => {
+    setCapturedImage(null);
+  }, []);
+
+  // ── Snapshot review ───────────────────────────────────────────────────────
+  if (capturedImage) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <Image
+          source={{ uri: capturedImage }}
+          style={{ flex: 1, width: '100%' }}
+          resizeMode="cover"
+        />
+        <View style={styles.controls}>
+          <TouchableOpacity style={styles.backButton} onPress={handleRetake}>
+            <Text style={styles.backButtonText}>Retake</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.captureButton, { backgroundColor: '#C2185B' }]}
+            onPress={handleSave}
+            disabled={isSaving}
+          >
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>
+              {isSaving ? 'Saving…' : 'Save'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.settingsButton} onPress={() => router.back()}>
+            <Text style={styles.settingsButtonText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ── Live AR view ──────────────────────────────────────────────────────────
+  return (
+    <View style={styles.container}>
+      <StatusBar style="light" />
+
+      {/* The WebView fills the screen and handles camera + AR rendering */}
+      <ARMakeupWebView
+        ref={webViewRef}
+        layers={layers}
+        onReady={handleReady}
+        onCaptured={handleCaptured}
+        onColorsExtracted={handleColorsExtracted}
+        onError={(msg) => console.warn('[OpenMakeupSDK]', msg)}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Top overlay: product label */}
+      <View style={styles.productInfoOverlay} pointerEvents="none">
+        <Text style={styles.productName} numberOfLines={1}>
+          {activeCategories.size > 0
+            ? activeCategories.size === 1
+              ? [...activeCategories][0].charAt(0).toUpperCase() + [...activeCategories][0].slice(1)
+              : `${activeCategories.size} product look`
+            : 'Virtual Try-On'}
+        </Text>
+        <Text style={styles.instructionText}>
+          {sdkReady ? 'Look natural — AR is live' : 'Loading AR engine…'}
+        </Text>
+      </View>
+
+      {/* Bottom: palette chips + action controls — absolutely pinned to bottom */}
+      <View style={styles.openMakeupBottom}>
+        {/* Horizontally scrollable makeup category chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.palette}
+        >
+          {PALETTE_ITEMS.map((item) => {
+            const active = activeCategories.has(item.category);
+            return (
+              <TouchableOpacity
+                key={item.category}
+                style={[styles.chip, active && { backgroundColor: item.color, borderColor: item.color }]}
+                onPress={() => toggleLayer(item.category)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Back / Capture controls */}
+        <View style={styles.controls}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.captureButton, !sdkReady && { opacity: 0.4 }]}
+            onPress={handleCapture}
+            disabled={!sdkReady}
+          >
+            <View style={styles.captureButtonInner} />
+          </TouchableOpacity>
+          <View style={{ width: 80 }} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Entry-point — routes to the correct path based on feature flag
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function FaceCameraScreen() {
+  // Feature flag gate: use OpenMakeupSDK WebView or legacy SVG overlay
+  if (FeatureFlags.ENABLE_OPENMAKEUP_SDK) {
+    return <OpenMakeupScreen />;
+  }
+  return <LegacyCameraScreen />;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Path B — Legacy camera screen (Python API + SVG polygon overlay)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function LegacyCameraScreen() {
   const router = useRouter();
   const { productType, productName, productTypes, productNames } = useLocalSearchParams<{
     productType: string;
@@ -669,6 +1109,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 15,
+  },
+  /** Absolutely positioned wrapper pinning palette + controls to the bottom of the AR view */
+  openMakeupBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  /** Horizontal chip row sitting just above the controls bar */
+  palette: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.45)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  chipText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chipTextActive: {
+    color: '#fff',
   },
   controls: {
     flexDirection: 'row',
