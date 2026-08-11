@@ -9,9 +9,10 @@
  *  • Skin-tone sampling: samples forehead landmark every frame to compute
  *    a darkness score (0=light, 1=dark) used to scale multiply opacity so
  *    makeup reads clearly on all skin tones.
- *  • Lipstick: 4-pass renderer — adaptive-alpha base multiply, edge-depth
- *    liner stroke, aggressive mouth-opening carve, multi-spot gloss (cupid's
- *    bow + lower-lip centre + corner gleams).
+ *  • Lipstick: 3-pass renderer — adaptive-alpha base multiply and edge-depth
+ *    liner stroke (both clipped to the lip ring so the mouth interior is
+ *    never painted), plus multi-spot gloss (cupid's bow + lower-lip centre +
+ *    corner gleams).
  *  • Eyeshadow: 5-zone renderer — deep lash-line band, mid-lid main colour,
  *    crease-definition ellipse, brow-bone highlight, deterministic 8-dot
  *    shimmer grid (no Math.random).
@@ -184,6 +185,28 @@ function buildARHtml(layers: MakeupLayer[]): string {
     function dist2(a, b){
       return Math.sqrt((a[0]-b[0])*(a[0]-b[0])+(a[1]-b[1])*(a[1]-b[1]));
     }
+    // Adds one smoothed closed subpath without starting a new path (for compound paths).
+    function addSmoothSubpath(ctx, points){
+      if(points.length < 2) return;
+      ctx.moveTo((points[0][0]+points[1][0])/2,(points[0][1]+points[1][1])/2);
+      for(var i=1;i<points.length-1;i++){
+        var mx=(points[i][0]+points[i+1][0])/2;
+        var my=(points[i][1]+points[i+1][1])/2;
+        ctx.quadraticCurveTo(points[i][0],points[i][1],mx,my);
+      }
+      var mx0=(points[points.length-1][0]+points[0][0])/2;
+      var my0=(points[points.length-1][1]+points[0][1])/2;
+      ctx.quadraticCurveTo(points[points.length-1][0],points[points.length-1][1],mx0,my0);
+      ctx.closePath();
+    }
+    // Clips to the lip ring (outer boundary minus inner mouth opening) so the
+    // mouth interior — teeth, tongue — is never painted, even when the mouth is open.
+    function clipLipRing(ctx, outer, inner){
+      ctx.beginPath();
+      addSmoothSubpath(ctx, outer);
+      addSmoothSubpath(ctx, inner);
+      ctx.clip('evenodd');
+    }
 
     // ── Color extraction helper ────────────────────────────────────────
     // Returns the most saturated mid-brightness pixel colour from raw RGBA data.
@@ -224,21 +247,32 @@ function buildARHtml(layers: MakeupLayer[]): string {
       var inner = pts(lms, LIP_INNER, W, H);
       var r = rgb[0], g = rgb[1], b = rgb[2];
 
-      // Pass 1 — Base color (multiply, adaptive alpha for skin tone)
+      // Pass 1 — Base color, split across two passes. Multiply (depth/shadow)
+      // alone reads as a flat sticker; a second soft-light pass breaks up that
+      // flatness with texture-aware pigment. soft-light brightens wherever the
+      // product colour's own channel is >128 (true for most lipstick reds), so
+      // its alpha is kept low here specifically to avoid that whitening — this
+      // is the one knob to raise/lower depending on how it reads.
+      // Clipped to the lip ring so the mouth interior is never painted.
       ctx.save();
-      smoothPath(ctx, outer, true);
-      ctx.clip();
+      clipLipRing(ctx, outer, inner);
       ctx.globalCompositeOperation = 'multiply';
-      ctx.globalAlpha = 0.72 + skinDark * 0.18;
+      ctx.globalAlpha = 0.6 + skinDark * 0.15;
       ctx.fillStyle = 'rgb('+r+','+g+','+b+')';
-      smoothPath(ctx, outer, true);
-      ctx.fill();
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+
+      ctx.save();
+      clipLipRing(ctx, outer, inner);
+      ctx.globalCompositeOperation = 'soft-light';
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = 'rgb('+r+','+g+','+b+')';
+      ctx.fillRect(0, 0, W, H);
       ctx.restore();
 
       // Pass 2 — Edge depth / lip liner effect
       ctx.save();
-      smoothPath(ctx, outer, true);
-      ctx.clip();
+      clipLipRing(ctx, outer, inner);
       ctx.globalCompositeOperation = 'multiply';
       ctx.globalAlpha = 0.28;
       ctx.strokeStyle = 'rgb('+Math.round(r*0.55)+','+Math.round(g*0.55)+','+Math.round(b*0.55)+')';
@@ -249,18 +283,7 @@ function buildARHtml(layers: MakeupLayer[]): string {
       ctx.stroke();
       ctx.restore();
 
-      // Pass 3 — Carve inner mouth opening (aggressive)
-      ctx.save();
-      smoothPath(ctx, outer, true);
-      ctx.clip();
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.globalAlpha = 0.82;
-      ctx.fillStyle = '#000';
-      smoothPath(ctx, inner, true);
-      ctx.fill();
-      ctx.restore();
-
-      // Pass 4 — Gloss (glossy or shimmer finish only)
+      // Pass 3 — Gloss (glossy or shimmer finish only)
       if(finish === 'glossy' || finish === 'shimmer'){
         var cupid      = pts(lms, [0],   W, H)[0];
         var lowerC     = pts(lms, [17],  W, H)[0];
@@ -270,10 +293,9 @@ function buildARHtml(layers: MakeupLayer[]): string {
 
         // Cupid's bow highlight
         ctx.save();
-        smoothPath(ctx, outer, true);
-        ctx.clip();
+        clipLipRing(ctx, outer, inner);
         ctx.globalCompositeOperation = 'screen';
-        ctx.globalAlpha = 0.55;
+        ctx.globalAlpha = 0.1;
         var gCupid = ctx.createRadialGradient(cupid[0], cupid[1], 0, cupid[0], cupid[1], 14);
         gCupid.addColorStop(0, 'rgba(255,255,255,1)');
         gCupid.addColorStop(1, 'rgba(255,255,255,0)');
@@ -285,10 +307,9 @@ function buildARHtml(layers: MakeupLayer[]): string {
 
         // Lower lip centre highlight
         ctx.save();
-        smoothPath(ctx, outer, true);
-        ctx.clip();
+        clipLipRing(ctx, outer, inner);
         ctx.globalCompositeOperation = 'screen';
-        ctx.globalAlpha = 0.65;
+        ctx.globalAlpha = 0.12;
         var gLower = ctx.createRadialGradient(lowerShift[0], lowerShift[1], 0, lowerShift[0], lowerShift[1], 18);
         gLower.addColorStop(0, 'rgba(255,255,255,1)');
         gLower.addColorStop(1, 'rgba(255,255,255,0)');
@@ -303,10 +324,9 @@ function buildARHtml(layers: MakeupLayer[]): string {
         for(var ci=0; ci<corners.length; ci++){
           var corner = corners[ci];
           ctx.save();
-          smoothPath(ctx, outer, true);
-          ctx.clip();
+          clipLipRing(ctx, outer, inner);
           ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = 0.3;
+          ctx.globalAlpha = 0.05;
           var gCorner = ctx.createRadialGradient(corner[0], corner[1], 0, corner[0], corner[1], 6);
           gCorner.addColorStop(0, 'rgba(255,255,255,1)');
           gCorner.addColorStop(1, 'rgba(255,255,255,0)');
@@ -666,11 +686,11 @@ function buildARHtml(layers: MakeupLayer[]): string {
         ctx.drawImage(img,0,0,W,H);
         if(results.multiFaceLandmarks&&results.multiFaceLandmarks.length>0){
           var lms = results.multiFaceLandmarks[0];
-          if(!faceDetected){ faceDetected=true; setPill('Look natural — AR is live',true); }
+          if(!faceDetected){ faceDetected=true; setPill('Look natural, AR is live',true); }
           sampleSkinTone(ctx, lms, W, H);
           activeLayers.forEach(function(layer){ applyLayer(ctx,layer,lms,W,H); });
         } else {
-          if(faceDetected) setPill('Face lost — move closer',false);
+          if(faceDetected) setPill('Face lost, move closer',false);
         }
       });
 
