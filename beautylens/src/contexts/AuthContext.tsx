@@ -65,6 +65,7 @@ interface AuthContextValue {
   sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -224,6 +225,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (auth) await firebaseSignOut(auth);
   }, []);
 
+  // Firebase mutates `currentUser` in place and does not fire onAuthStateChanged
+  // for profile edits, so `user` state needs a manual nudge to reflect the new
+  // name. Spreading preserves the bound instance methods (getIdToken, reload,
+  // etc.) the modular SDK attaches as own properties, so callers relying on
+  // those (the token getter effect above) keep working against the new object.
+  const updateDisplayName = useCallback(async (displayName: string) => {
+    const auth = getFirebaseAuth();
+    if (!auth?.currentUser) {
+      throw new Error('You need to be signed in to update your profile.');
+    }
+    const trimmed = displayName.trim();
+    if (!trimmed) {
+      throw new Error('Name cannot be empty.');
+    }
+    try {
+      await updateFirebaseProfile(auth.currentUser, { displayName: trimmed });
+      setUser({ ...auth.currentUser } as User);
+    } catch (e) {
+      throw new Error(friendlyAuthError(e));
+    }
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -237,6 +260,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sendPasswordReset,
       signOut,
       refreshSession: syncSession,
+      updateDisplayName,
     }),
     [
       user,
@@ -249,6 +273,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sendPasswordReset,
       signOut,
       syncSession,
+      updateDisplayName,
     ]
   );
 
