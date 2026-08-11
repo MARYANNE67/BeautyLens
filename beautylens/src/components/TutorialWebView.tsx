@@ -41,24 +41,34 @@ export const CATEGORY_COLOR: Record<PlacementCategory, string> = {
   bronzer: '#B87840',
 };
 
+export interface TutorialLabelItem {
+  category: PlacementCategory;
+  label: string;
+}
+
 export interface TutorialWebViewProps {
-  /** Category to start on. Only read at mount -- switching categories after
+  /** Categories active at mount. Only read once -- toggling categories after
    *  that must go through the `setCategory` ref method (a message to the
    *  already-running WebView), never by changing this prop, or the whole
-   *  camera/FaceMesh pipeline would reload from scratch on every switch. */
-  initialCategory: PlacementCategory;
+   *  camera/FaceMesh pipeline would reload from scratch on every toggle. */
+  initialCategories: PlacementCategory[];
   onReady?: () => void;
   onError?: (message: string) => void;
   onShapeLocked?: (shape: FaceShape) => void;
-  onLabel?: (label: string) => void;
+  /** One entry per currently-active category whose placement rule has
+   *  resolved (i.e. the face shape has locked in). Empty while nothing is
+   *  active or the shape hasn't locked yet. */
+  onLabels?: (items: TutorialLabelItem[]) => void;
   style?: object;
 }
 
 export interface TutorialWebViewRef {
-  setCategory(category: PlacementCategory): void;
+  /** Turns a single category's overlay on or off; other active categories
+   *  keep drawing untouched, so multiple can be layered at once. */
+  setCategory(category: PlacementCategory, active: boolean): void;
 }
 
-function buildTutorialHtml(initialCategory: PlacementCategory): string {
+function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -289,6 +299,15 @@ function buildTutorialHtml(initialCategory: PlacementCategory): string {
     function smoothPath(ctx, points, close){
       if(points.length < 2) return;
       ctx.beginPath();
+      // Exactly 2 points: the loop below never runs (nothing between two
+      // endpoints to curve through), so moveTo-to-a-midpoint alone leaves an
+      // empty path -- stroke() then draws nothing. Many rule-table bands are
+      // literal 2-point straight lines, so this isn't an edge case to skip.
+      if(points.length === 2){
+        ctx.moveTo(points[0][0], points[0][1]);
+        ctx.lineTo(points[1][0], points[1][1]);
+        return;
+      }
       ctx.moveTo((points[0][0]+points[1][0])/2,(points[0][1]+points[1][1])/2);
       for(var i=1;i<points.length-1;i++){
         var mx=(points[i][0]+points[i+1][0])/2;
@@ -381,8 +400,8 @@ function buildTutorialHtml(initialCategory: PlacementCategory): string {
     // Zones mark general placement *areas*, not exact points -- scaled up
     // from the rule table's base strokeWidth/radius in one place, same
     // reasoning as ARMakeupWebView.tsx's BAND_WIDTH_SCALE/MARKER_RADIUS_SCALE.
-    var BAND_WIDTH_SCALE = 1.8;
-    var MARKER_RADIUS_SCALE = 1.6;
+    var BAND_WIDTH_SCALE = 2.6;
+    var MARKER_RADIUS_SCALE = 2.3;
 
     function drawZones(ctx, lms, W, H, rule, category){
       var regions = buildRegions(lms, W, H);
@@ -434,7 +453,10 @@ function buildTutorialHtml(initialCategory: PlacementCategory): string {
     var canvasEl = document.getElementById('out');
     var ctx = null;
 
-    var activeCategory = ${JSON.stringify(initialCategory)};
+    // Set of currently-active categories -- several can draw at once, each
+    // toggled independently via the 'setCategory' message below.
+    var activeCategories = {};
+    (${JSON.stringify(initialCategories)}).forEach(function(c){ activeCategories[c] = true; });
     // Learned once per session: sample the first SHAPE_SAMPLE_TARGET
     // classifications after a face is detected, lock to the most frequent
     // one, then stop re-classifying -- matches the ported design (a face
@@ -443,19 +465,28 @@ function buildTutorialHtml(initialCategory: PlacementCategory): string {
     var SHAPE_SAMPLE_TARGET = 20;
     var shapeSamples = [];
     var lockedShape = null;
-    var lastLabelSent = null;
+    var lastLabelsKey = null;
 
-    function currentRule(){
+    function ruleFor(category){
       if(!lockedShape) return null;
-      var byShape = PLACEMENT_RULES[activeCategory];
+      var byShape = PLACEMENT_RULES[category];
       return byShape ? byShape[lockedShape] : null;
     }
-    function maybeSendLabel(){
-      var rule = currentRule();
-      var text = rule ? rule.label : (lockedShape ? '' : 'Hold still — learning your face shape…');
-      if(text !== lastLabelSent){
-        lastLabelSent = text;
-        rnPost({type:'label', text:text});
+    // Nothing is sent until the shape locks in -- RN shows its own "learning
+    // your face shape" message from the shapeLocked callback until then, so
+    // there's no need for a placeholder label per (still-inactive) category.
+    function maybeSendLabels(){
+      if(!lockedShape) return;
+      var items = [];
+      Object.keys(activeCategories).forEach(function(cat){
+        if(!activeCategories[cat]) return;
+        var rule = ruleFor(cat);
+        if(rule) items.push({ category:cat, label:rule.label });
+      });
+      var key = JSON.stringify(items);
+      if(key !== lastLabelsKey){
+        lastLabelsKey = key;
+        rnPost({type:'labels', items:items});
       }
     }
 
@@ -505,10 +536,13 @@ function buildTutorialHtml(initialCategory: PlacementCategory): string {
           }
 
           if(lockedShape){
-            var rule = currentRule();
-            if(rule) drawZones(ctx, lms, W, H, rule, activeCategory);
+            Object.keys(activeCategories).forEach(function(cat){
+              if(!activeCategories[cat]) return;
+              var rule = ruleFor(cat);
+              if(rule) drawZones(ctx, lms, W, H, rule, cat);
+            });
           }
-          maybeSendLabel();
+          maybeSendLabels();
         } else {
           if(faceDetected) setPill('Face lost — move closer',false);
         }
@@ -533,9 +567,10 @@ function buildTutorialHtml(initialCategory: PlacementCategory): string {
         catch(e){return;}
         if(!msg) return;
         if(msg.type==='setCategory'){
-          activeCategory = msg.category;
-          lastLabelSent = null; // force re-send so RN's label updates immediately
-          maybeSendLabel();
+          if(msg.active){ activeCategories[msg.category] = true; }
+          else { delete activeCategories[msg.category]; }
+          lastLabelsKey = null; // force re-send so RN's labels update immediately
+          maybeSendLabels();
         }
       }
       window.addEventListener('message',   handleMsg);
@@ -550,7 +585,7 @@ function buildTutorialHtml(initialCategory: PlacementCategory): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const TutorialWebView = forwardRef<TutorialWebViewRef, TutorialWebViewProps>(
-  ({ initialCategory, onReady, onError, onShapeLocked, onLabel, style }, ref) => {
+  ({ initialCategories, onReady, onError, onShapeLocked, onLabels, style }, ref) => {
     const webViewRef = useRef<WebView>(null);
 
     const send = useCallback((payload: object) => {
@@ -563,7 +598,8 @@ const TutorialWebView = forwardRef<TutorialWebViewRef, TutorialWebViewProps>(
     }, []);
 
     useImperativeHandle(ref, () => ({
-      setCategory: (nextCategory: PlacementCategory) => send({ type: 'setCategory', category: nextCategory }),
+      setCategory: (category: PlacementCategory, active: boolean) =>
+        send({ type: 'setCategory', category, active }),
     }));
 
     const handleMessage = useCallback(
@@ -575,18 +611,18 @@ const TutorialWebView = forwardRef<TutorialWebViewRef, TutorialWebViewProps>(
           case 'ready':        onReady?.();                                     break;
           case 'error':        onError?.(msg.message as string);                break;
           case 'shapeLocked':  onShapeLocked?.(msg.shape as FaceShape);          break;
-          case 'label':        onLabel?.(msg.text as string);                   break;
+          case 'labels':       onLabels?.(msg.items as TutorialLabelItem[]);    break;
           default: break;
         }
       },
-      [onReady, onError, onShapeLocked, onLabel]
+      [onReady, onError, onShapeLocked, onLabels]
     );
 
-    // Built once at mount, deliberately not reactive to initialCategory
+    // Built once at mount, deliberately not reactive to initialCategories
     // changes (see the prop's doc comment) -- rebuilding this string would
     // change `source.html` and reload the whole WebView/camera pipeline.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const html = React.useMemo(() => buildTutorialHtml(initialCategory), []);
+    const html = React.useMemo(() => buildTutorialHtml(initialCategories), []);
 
     return (
       <View style={[styles.container, style]}>

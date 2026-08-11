@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import TutorialWebView, {
   CATEGORY_COLOR,
   type TutorialWebViewRef,
+  type TutorialLabelItem,
   type PlacementCategory,
   type FaceShape,
 } from '../components/TutorialWebView';
@@ -34,18 +35,30 @@ const FACE_SHAPE_LABEL: Record<FaceShape, string> = {
   long: 'Long',
 };
 
+const INITIAL_CATEGORIES: PlacementCategory[] = [];
+
 export default function TutorialScreen() {
   const router = useRouter();
   const webViewRef = useRef<TutorialWebViewRef>(null);
 
-  const [activeCategory, setActiveCategory] = useState<PlacementCategory>('contour');
+  const [activeCategories, setActiveCategories] = useState<Set<PlacementCategory>>(
+    () => new Set(INITIAL_CATEGORIES)
+  );
   const [sdkReady, setSdkReady] = useState(false);
-  const [label, setLabel] = useState('Loading tutorial…');
+  const [labels, setLabels] = useState<TutorialLabelItem[]>([]);
   const [faceShape, setFaceShape] = useState<FaceShape | null>(null);
 
-  const handleSelectCategory = useCallback((category: PlacementCategory) => {
-    setActiveCategory(category);
-    webViewRef.current?.setCategory(category);
+  // Tapping an already-active category turns its overlay off; tapping an
+  // inactive one turns it on. Several can be layered on at once.
+  const handleToggleCategory = useCallback((category: PlacementCategory) => {
+    setActiveCategories((prev) => {
+      const next = new Set(prev);
+      const willBeActive = !next.has(category);
+      if (willBeActive) next.add(category);
+      else next.delete(category);
+      webViewRef.current?.setCategory(category, willBeActive);
+      return next;
+    });
   }, []);
 
   return (
@@ -54,9 +67,9 @@ export default function TutorialScreen() {
 
       <TutorialWebView
         ref={webViewRef}
-        initialCategory={activeCategory}
+        initialCategories={INITIAL_CATEGORIES}
         onReady={() => setSdkReady(true)}
-        onLabel={setLabel}
+        onLabels={setLabels}
         onShapeLocked={setFaceShape}
         style={StyleSheet.absoluteFillObject}
       />
@@ -76,19 +89,34 @@ export default function TutorialScreen() {
         <View style={styles.spacer} />
 
         <View style={styles.instructionWrap}>
-          {!sdkReady && <ActivityIndicator color="#fff" style={{ marginBottom: 8 }} />}
-          <Text style={styles.instructionText}>{label}</Text>
+          {!sdkReady || !faceShape ? (
+            <>
+              <ActivityIndicator color="#fff" style={{ marginBottom: 8 }} />
+              <Text style={styles.instructionText}>
+                {!sdkReady ? 'Loading tutorial…' : 'Hold still — learning your face shape…'}
+              </Text>
+            </>
+          ) : activeCategories.size === 0 ? (
+            <Text style={styles.instructionText}>Tap a category below to see placement guidance</Text>
+          ) : (
+            labels.map((item) => (
+              <View key={item.category} style={styles.labelRow}>
+                <View style={[styles.labelDot, { backgroundColor: CATEGORY_COLOR[item.category] }]} />
+                <Text style={[styles.instructionText, styles.labelText]}>{item.label}</Text>
+              </View>
+            ))
+          )}
         </View>
 
         <View style={styles.paletteRow}>
           {CATEGORY_ITEMS.map((item) => {
-            const active = activeCategory === item.category;
+            const active = activeCategories.has(item.category);
             const color = CATEGORY_COLOR[item.category];
             return (
               <TouchableOpacity
                 key={item.category}
                 style={styles.categoryCircleWrap}
-                onPress={() => handleSelectCategory(item.category)}
+                onPress={() => handleToggleCategory(item.category)}
                 activeOpacity={0.75}
               >
                 <View
@@ -151,13 +179,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 19,
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'stretch',
+    paddingVertical: 3,
+  },
+  labelDot: { width: 8, height: 8, borderRadius: 4 },
+  labelText: { flex: 1, textAlign: 'left' },
 
   paletteRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 14,
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   categoryCircleWrap: { alignItems: 'center', width: 58 },
   categoryCircle: {
@@ -167,7 +205,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
   categoryCircleLabel: { color: '#fff', fontSize: 10, fontWeight: '600', marginTop: 4 },
 });
