@@ -563,6 +563,20 @@ export default function RecommendationsTabScreen() {
                 camera settings can affect color accuracy. Confirm in natural light before buying.
               </Text>
             )}
+
+            {/* Recommendations are keyed off the latest scan, so a fresh scan
+                naturally updates this tab -- but until now the only way back
+                to /skin-scan from here was via the Settings tab. */}
+            {!loading && (
+              <TouchableOpacity
+                style={styles.rescanBtn}
+                onPress={() => router.push('/skin-scan')}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="scan-outline" size={18} color={PINK} />
+                <Text style={styles.rescanBtnText}>Rescan Face</Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
       </ScrollView>
@@ -748,4 +762,20 @@ const styles = StyleSheet.create({
   approxText: { flex: 1, fontSize: 13, color: '#7A5B00', lineHeight: 18 },
 
   disclaimer: { fontSize: 13, color: '#A0A0A0', textAlign: 'center', lineHeight: 18, marginTop: 8 },
+
+  rescanBtn: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 999,
+    backgroundColor: '#FFF5F8',
+    borderWidth: 1,
+    borderColor: '#F3C9D9',
+  },
+  rescanBtnText: { fontSize: 15, fontWeight: '700', color: PINK },
 });
