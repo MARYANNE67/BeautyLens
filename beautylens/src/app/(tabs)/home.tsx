@@ -175,19 +175,19 @@ export default function HomeScreen() {
 
           <View style={styles.featureCard}>
             <View style={styles.featureIcon}>
-              <Ionicons name="albums-outline" size={20} color={PINK} />
+              <Ionicons name="contrast-outline" size={20} color={PINK} />
             </View>
-            <Text style={styles.featureTitle}>Track My Makeup</Text>
+            <Text style={styles.featureTitle}>Makeup Placement Tutorial</Text>
             <Text style={styles.featureBody}>
-              Manage your products, save shades, and track open dates.
+              Live placement guidance for contour, blush and more, tailored to your face shape.
             </Text>
             <TouchableOpacity
               style={styles.featureBtn}
-              onPress={() => router.push('/collection')}
+              onPress={() => router.push('/tutorial')}
               activeOpacity={0.8}
             >
-              <Ionicons name="bag-handle-outline" size={15} color={PINK} />
-              <Text style={styles.featureBtnText}>View Collection</Text>
+              <Ionicons name="camera-outline" size={15} color={PINK} />
+              <Text style={styles.featureBtnText}>Start Tutorial</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -65,6 +65,7 @@ export default function RootLayout() {
           <Stack.Screen name="scan"               options={{ headerShown: false }} />
           <Stack.Screen name="tryon"              options={{ headerShown: false }} />
           <Stack.Screen name="camera"             options={{ headerShown: false }} />
+          <Stack.Screen name="tutorial"           options={{ headerShown: false }} />
           <Stack.Screen name="onboarding"         options={{ headerShown: false }} />
           <Stack.Screen name="skin-scan/index"    options={{ headerShown: false }} />
           <Stack.Screen name="undertone-confirm"  options={{ headerShown: false }} />
