@@ -183,6 +183,22 @@ export default function TutorialScreen() {
 
         {showInstructions && (
         <View style={styles.instructionWrap} {...dismissPanResponder.panHandlers}>
+          {/* Always reserves the same slot height, so instructionWrap's
+              content never shifts depending on which state is showing --
+              only the icon inside is conditional. Only shown once there's
+              an actual guidance label to dismiss: not during loading/
+              learning, and not on the "tap a category" prompt, which is
+              the primary call-to-action, not content to swipe away. */}
+          <View style={styles.dismissHandle}>
+            {sdkReady && faceShape && activeCategories.size > 0 && (
+              <TouchableOpacity
+                onPress={() => setShowInstructions(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 20, right: 20 }}
+              >
+                <Ionicons name="chevron-down" size={14} color="rgba(255,255,255,0.6)" />
+              </TouchableOpacity>
+            )}
+          </View>
           {!sdkReady || !faceShape ? (
             <>
               <ActivityIndicator color="#fff" style={{ marginBottom: 8 }} />
@@ -201,6 +217,16 @@ export default function TutorialScreen() {
             ))
           )}
         </View>
+        )}
+
+        {!showInstructions && (
+          <TouchableOpacity
+            style={styles.reopenHandle}
+            onPress={() => setShowInstructions(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="chevron-up" size={16} color="rgba(255,255,255,0.75)" />
+          </TouchableOpacity>
         )}
 
         {/* One panel, one background -- covers the palette row, the capture
@@ -288,6 +314,22 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
+  },
+  // Fixed height regardless of whether the icon inside renders, so
+  // instructionWrap's content never shifts/resizes depending on state.
+  dismissHandle: {
+    height: 18,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reopenHandle: {
+    alignSelf: 'center',
+    paddingHorizontal: 22,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    marginBottom: 6,
   },
   instructionText: {
     color: '#fff',
