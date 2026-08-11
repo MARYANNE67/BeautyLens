@@ -857,7 +857,7 @@ const ARMakeupWebView = forwardRef<ARMakeupWebViewRef, ARMakeupWebViewProps>(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           {...({ allowsProtectedMedia: true } as any)}
           onMessage={handleMessage}
-          onPermissionRequest={(e) => { e.nativeEvent.grant(e.nativeEvent.resources); }}
+          onPermissionRequest={(e: any) => { e.nativeEvent.grant(e.nativeEvent.resources); }}
           onError={(syntheticEvent) => {
             onError?.(`WebView error: ${syntheticEvent.nativeEvent.description}`);
           }}

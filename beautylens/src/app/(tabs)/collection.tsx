@@ -1862,7 +1862,7 @@ export default function CollectionScreen() {
               </View>
               <Text style={styles.emptyTitle}>No saved shades yet</Text>
               <Text style={styles.emptyBody}>
-                Run a Shade Match and save the shades you like, they'll appear here.
+                Run a Shade Match and save the shades you like, they&apos;ll appear here.
               </Text>
             </View>
           ) : (
