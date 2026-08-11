@@ -183,22 +183,22 @@ export default function TutorialScreen() {
 
         {showInstructions && (
         <View style={styles.instructionWrap} {...dismissPanResponder.panHandlers}>
-          {/* Always reserves the same slot height, so instructionWrap's
-              content never shifts depending on which state is showing --
-              only the icon inside is conditional. Only shown once there's
-              an actual guidance label to dismiss: not during loading/
-              learning, and not on the "tap a category" prompt, which is
-              the primary call-to-action, not content to swipe away. */}
-          <View style={styles.dismissHandle}>
-            {sdkReady && faceShape && activeCategories.size > 0 && (
-              <TouchableOpacity
-                onPress={() => setShowInstructions(false)}
-                hitSlop={{ top: 8, bottom: 8, left: 20, right: 20 }}
-              >
-                <Ionicons name="chevron-down" size={14} color="rgba(255,255,255,0.6)" />
-              </TouchableOpacity>
-            )}
-          </View>
+          {/* Only shown once there's an actual guidance label to dismiss --
+              not during loading/learning, and not on the "tap a category"
+              prompt, which is the primary call-to-action, not content to
+              swipe away. Not reserving a placeholder slot when absent:
+              instructionWrap's own symmetric padding already looks even on
+              its own, and an empty reserved row above bare "Tap a
+              category" text read as a bigger gap than it needed to. */}
+          {sdkReady && faceShape && activeCategories.size > 0 && (
+            <TouchableOpacity
+              style={styles.dismissHandle}
+              onPress={() => setShowInstructions(false)}
+              hitSlop={{ top: 8, bottom: 8, left: 20, right: 20 }}
+            >
+              <Ionicons name="chevron-down" size={14} color="rgba(255,255,255,0.6)" />
+            </TouchableOpacity>
+          )}
           {!sdkReady || !faceShape ? (
             <>
               <ActivityIndicator color="#fff" style={{ marginBottom: 8 }} />
@@ -315,14 +315,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
   },
-  // Fixed height regardless of whether the icon inside renders, so
-  // instructionWrap's content never shifts/resizes depending on state.
-  dismissHandle: {
-    height: 18,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  dismissHandle: { alignSelf: 'center', paddingBottom: 4 },
   reopenHandle: {
     alignSelf: 'center',
     paddingHorizontal: 22,
