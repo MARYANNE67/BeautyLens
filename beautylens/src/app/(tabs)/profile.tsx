@@ -16,6 +16,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -70,12 +71,41 @@ function Row({
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, profileId, signOut } = useAuth();
+  const { user, profileId, signOut, updateDisplayName } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   const displayName = user?.displayName?.trim() || 'Beauty Lover';
   const email = user?.email || 'No email on file';
   const initial = (user?.displayName?.trim() || user?.email || '?').charAt(0).toUpperCase();
+
+  const handleStartEditName = useCallback(() => {
+    setNameInput(user?.displayName?.trim() || '');
+    setEditingName(true);
+  }, [user?.displayName]);
+
+  const handleCancelEditName = useCallback(() => {
+    setEditingName(false);
+  }, []);
+
+  const handleSaveName = useCallback(async () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed) {
+      Alert.alert('Name cannot be empty', 'Enter a name, or cancel to keep the current one.');
+      return;
+    }
+    setSavingName(true);
+    try {
+      await updateDisplayName(trimmed);
+      setEditingName(false);
+    } catch (e) {
+      Alert.alert('Could not update name', (e as Error).message);
+    } finally {
+      setSavingName(false);
+    }
+  }, [nameInput, updateDisplayName]);
 
   const handleSignOut = useCallback(() => {
     Alert.alert(
@@ -114,18 +144,52 @@ export default function SettingsScreen() {
               <Text style={styles.avatarText}>{initial}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.accountName} numberOfLines={1}>
-                {displayName}
-              </Text>
+              {editingName ? (
+                <TextInput
+                  style={styles.accountNameInput}
+                  value={nameInput}
+                  onChangeText={setNameInput}
+                  placeholder="Your name"
+                  placeholderTextColor="#B8B8B8"
+                  autoFocus
+                  editable={!savingName}
+                  onSubmitEditing={handleSaveName}
+                  returnKeyType="done"
+                />
+              ) : (
+                <Text style={styles.accountName} numberOfLines={1}>
+                  {displayName}
+                </Text>
+              )}
               <Text style={styles.accountEmail} numberOfLines={1}>
                 {email}
               </Text>
             </View>
-            {user?.emailVerified && (
-              <View style={styles.verifiedPill}>
-                <Ionicons name="checkmark-circle" size={13} color="#2E7D32" />
-                <Text style={styles.verifiedText}>Verified</Text>
-              </View>
+            {editingName ? (
+              savingName ? (
+                <ActivityIndicator color={PINK} style={{ marginRight: 4 }} />
+              ) : (
+                <View style={styles.nameEditActions}>
+                  <TouchableOpacity onPress={handleCancelEditName} style={styles.nameEditBtn}>
+                    <Ionicons name="close" size={18} color={MUTED} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleSaveName} style={styles.nameEditBtn}>
+                    <Ionicons name="checkmark" size={18} color={PINK} />
+                  </TouchableOpacity>
+                </View>
+              )
+            ) : (
+              <>
+                {user?.emailVerified && (
+                  <View style={styles.verifiedPill}>
+                    <Ionicons name="checkmark-circle" size={13} color="#2E7D32" />
+                    <Text style={styles.verifiedText}>Verified</Text>
+                  </View>
+                )}
+                <TouchableOpacity onPress={handleStartEditName} style={styles.nameEditBtn} disabled={busy}>
+                  <Ionicons name="pencil" size={16} color={MUTED} />
+                </TouchableOpacity>
+              </>
             )}
           </View>
 
@@ -212,6 +276,14 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontSize: 22, fontWeight: '800', color: PINK },
   accountName: { fontSize: 16.5, fontWeight: '700', color: TEXT },
+  accountNameInput: {
+    fontSize: 16.5,
+    fontWeight: '700',
+    color: TEXT,
+    borderBottomWidth: 1.5,
+    borderBottomColor: PINK,
+    paddingVertical: 2,
+  },
   accountEmail: { fontSize: 13.5, color: MUTED, marginTop: 2 },
   verifiedPill: {
     flexDirection: 'row',
@@ -221,8 +293,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
+    marginRight: 4,
   },
   verifiedText: { fontSize: 11, fontWeight: '700', color: '#2E7D32' },
+  nameEditActions: { flexDirection: 'row', gap: 4 },
+  nameEditBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
   sectionLabel: {
     fontSize: 11.5,

@@ -65,6 +65,7 @@ interface AuthContextValue {
   sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -224,6 +225,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (auth) await firebaseSignOut(auth);
   }, []);
 
+  // Firebase mutates `currentUser` in place and does not fire onAuthStateChanged
+  // for profile edits, so `user` state needs a manual nudge to reflect the new
+  // name. A plain `{ ...auth.currentUser }` spread is NOT safe here: getIdToken/
+  // reload/etc. are defined on UserImpl.prototype, not as own properties, so a
+  // spread silently drops them and breaks every authenticated request made with
+  // the resulting object (the token getter effect below calls user.getIdToken()).
+  // Object.create + Object.assign copies the own data properties while keeping
+  // the same prototype, so those methods keep resolving correctly, and it's
+  // still a new reference so React actually re-renders.
+  const updateDisplayName = useCallback(async (displayName: string) => {
+    const auth = getFirebaseAuth();
+    if (!auth?.currentUser) {
+      throw new Error('You need to be signed in to update your profile.');
+    }
+    const trimmed = displayName.trim();
+    if (!trimmed) {
+      throw new Error('Name cannot be empty.');
+    }
+    try {
+      await updateFirebaseProfile(auth.currentUser, { displayName: trimmed });
+      const proto = Object.getPrototypeOf(auth.currentUser);
+      setUser(Object.assign(Object.create(proto), auth.currentUser) as User);
+    } catch (e) {
+      throw new Error(friendlyAuthError(e));
+    }
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -237,6 +265,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sendPasswordReset,
       signOut,
       refreshSession: syncSession,
+      updateDisplayName,
     }),
     [
       user,
@@ -249,6 +278,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sendPasswordReset,
       signOut,
       syncSession,
+      updateDisplayName,
     ]
   );
 
