@@ -80,7 +80,7 @@ export default function SettingsScreen() {
   const handleSignOut = useCallback(() => {
     Alert.alert(
       'Sign out?',
-      'Your scans and matches stay saved to your account — you can sign back in any time.',
+      'Your scans and matches stay saved to your account. You can sign back in any time.',
       [
         { text: 'Cancel', style: 'cancel' },
         {

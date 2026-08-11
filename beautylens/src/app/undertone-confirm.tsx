@@ -306,7 +306,7 @@ export default function UndertoneConfirmScreen() {
 
               {recs?.catalog_gap ? (
                 <Text style={styles.matchWarn}>
-                  Nothing in our range is a close colour match yet — this is the nearest we carry.
+                  Nothing in our range is a close colour match yet. This is the nearest we carry.
                 </Text>
               ) : null}
             </View>

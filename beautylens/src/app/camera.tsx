@@ -28,6 +28,7 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
@@ -120,14 +121,22 @@ function shadeToHex(shade: string | undefined): string | null {
   return null;
 }
 
-/** All toggleable makeup categories shown in the bottom palette */
-const PALETTE_ITEMS: { category: string; label: string; color: string }[] = [
-  { category: 'lipstick',   label: '💋 Lip',       color: '#C2185B' },
-  { category: 'eyeshadow',  label: '👁 Shadow',     color: '#7B1FA2' },
-  { category: 'eyeliner',   label: '✏ Liner',      color: '#1A237E' },
-  { category: 'mascara',    label: '✦ Mascara',    color: '#37474F' },
-  { category: 'blush',      label: '🌸 Blush',     color: '#C2185B' },
-  { category: 'foundation', label: '✨ Base',       color: '#A1887F' },
+/** Display metadata for each makeup category. The palette only shows circles for
+ *  categories actually scanned - see `scannedCategories` below - so tapping one
+ *  never applies a generic placeholder shade for a product you didn't pick.
+ *  Icons are picked per-category for a literal match (e.g. an actual lipstick
+ *  glyph for lip products) rather than a generic stand-in. */
+type PaletteItem =
+  | { category: string; label: string; color: string; iconFamily: 'mci';      icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'] }
+  | { category: string; label: string; color: string; iconFamily: 'ionicons'; icon: React.ComponentProps<typeof Ionicons>['name'] };
+
+const PALETTE_ITEMS: PaletteItem[] = [
+  { category: 'lipstick',   label: 'Lip',      color: '#C2185B', iconFamily: 'mci',      icon: 'lipstick' },
+  { category: 'eyeshadow',  label: 'Shadow',   color: '#7B1FA2', iconFamily: 'mci',      icon: 'palette-swatch' },
+  { category: 'eyeliner',   label: 'Liner',    color: '#1A237E', iconFamily: 'ionicons', icon: 'pencil' },
+  { category: 'mascara',    label: 'Mascara',  color: '#37474F', iconFamily: 'ionicons', icon: 'eye' },
+  { category: 'blush',      label: 'Blush',    color: '#C2185B', iconFamily: 'ionicons', icon: 'flower' },
+  { category: 'foundation', label: 'Base',     color: '#A1887F', iconFamily: 'ionicons', icon: 'water' },
 ];
 
 function OpenMakeupScreen() {
@@ -173,6 +182,14 @@ function OpenMakeupScreen() {
     [productTypeList, colorMap]
   );
 
+  // Categories actually scanned — the only ones the palette should offer.
+  // Anything else has no real product/shade behind it, only a generic default
+  // colour from resolveLayer(), so it's excluded rather than shown as a fake try-on.
+  const scannedCategories = React.useMemo(
+    () => new Set(productTypeList.map((t) => resolveLayer(t)?.category).filter(Boolean) as string[]),
+    [productTypeList]
+  );
+
   const webViewRef = useRef<ARMakeupWebViewRef>(null);
   const [sdkReady, setSdkReady] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -180,7 +197,7 @@ function OpenMakeupScreen() {
 
   // Tracks which categories are currently toggled on in the palette
   const [activeCategories, setActiveCategories] = useState<Set<string>>(
-    () => new Set(productTypeList.map((t) => resolveLayer(t)?.category).filter(Boolean) as string[])
+    () => new Set(scannedCategories)
   );
 
   // ── 4a. User-confirmed colour from the tryon shade picker (highest priority) ──
@@ -417,7 +434,7 @@ function OpenMakeupScreen() {
             : 'Virtual Try-On'}
         </Text>
         <Text style={styles.instructionText}>
-          {sdkReady ? 'Look natural — AR is live' : 'Loading AR engine…'}
+          {sdkReady ? 'Look natural, AR is live' : 'Loading AR engine…'}
         </Text>
       </View>
 
@@ -429,18 +446,29 @@ function OpenMakeupScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.palette}
         >
-          {PALETTE_ITEMS.map((item) => {
+          {PALETTE_ITEMS.filter((item) => scannedCategories.has(item.category)).map((item) => {
             const active = activeCategories.has(item.category);
             return (
               <TouchableOpacity
                 key={item.category}
-                style={[styles.chip, active && { backgroundColor: item.color, borderColor: item.color }]}
+                style={styles.categoryCircleWrap}
                 onPress={() => toggleLayer(item.category)}
                 activeOpacity={0.75}
               >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {item.label}
-                </Text>
+                <View
+                  style={[
+                    styles.categoryCircle,
+                    { borderColor: item.color },
+                    active && { backgroundColor: item.color },
+                  ]}
+                >
+                  {item.iconFamily === 'mci' ? (
+                    <MaterialCommunityIcons name={item.icon} size={22} color={active ? '#fff' : item.color} />
+                  ) : (
+                    <Ionicons name={item.icon} size={22} color={active ? '#fff' : item.color} />
+                  )}
+                </View>
+                <Text style={styles.categoryCircleLabel}>{item.label}</Text>
               </TouchableOpacity>
             );
           })}
@@ -1120,26 +1148,31 @@ const styles = StyleSheet.create({
   /** Horizontal chip row sitting just above the controls bar */
   palette: {
     flexDirection: 'row',
+    flexGrow: 1,
+    justifyContent: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
     gap: 8,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+  categoryCircleWrap: {
+    alignItems: 'center',
+    width: 58,
+  },
+  categoryCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.45)',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  chipText: {
+  categoryCircleLabel: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
-  },
-  chipTextActive: {
-    color: '#fff',
+    marginTop: 4,
   },
   controls: {
     flexDirection: 'row',
