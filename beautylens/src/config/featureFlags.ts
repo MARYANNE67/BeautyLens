@@ -14,6 +14,12 @@ export const FeatureFlags = {
   ENABLE_DEFAULT_FACE_MESH: false,
   ENABLE_SHADE_MATCHING: false,   // off until feat/shade-matching branch
   ENABLE_LOOK_BUILDER: false,     // off until feat/look-builder branch
+  /**
+   * When true, the camera screen renders the OpenMakeupSDK WebView instead of
+   * the legacy Python-API → SVG polygon pipeline.
+   * Requires: npx expo install react-native-webview  (then rebuild the native app)
+   */
+  ENABLE_OPENMAKEUP_SDK: true,
 } as const;
 
 export type FeatureFlagKey = keyof typeof FeatureFlags;

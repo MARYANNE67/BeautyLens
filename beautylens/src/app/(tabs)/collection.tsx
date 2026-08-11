@@ -1044,7 +1044,7 @@ async function scheduleExpiryNotification(
 
     const id = await Notifications.scheduleNotificationAsync({
       content: {
-        title: '💄 BeautyLens — Product expiring',
+        title: '💄 BeautyLens: Product expiring',
         body,
         data: { productName, type },
         sound: true,
@@ -1862,7 +1862,7 @@ export default function CollectionScreen() {
               </View>
               <Text style={styles.emptyTitle}>No saved shades yet</Text>
               <Text style={styles.emptyBody}>
-                Run a Shade Match and save the shades you like — theyll appear here.
+                Run a Shade Match and save the shades you like, they&apos;ll appear here.
               </Text>
             </View>
           ) : (

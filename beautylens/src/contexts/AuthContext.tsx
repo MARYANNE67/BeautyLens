@@ -82,7 +82,7 @@ function friendlyAuthError(error: unknown): string {
     case 'auth/missing-password':
       return 'Please enter your password.';
     case 'auth/weak-password':
-      return 'Password is too weak — use at least 6 characters.';
+      return 'Password is too weak. Use at least 6 characters.';
     case 'auth/email-already-in-use':
       return 'An account already exists with this email. Try signing in instead.';
     case 'auth/user-not-found':

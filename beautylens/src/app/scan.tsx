@@ -8,6 +8,7 @@ import {
   StyleSheet,
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
@@ -88,6 +89,8 @@ export default function ScanProductScreen() {
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastDetectionCount, setLastDetectionCount] = useState(0);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchText, setSearchText] = useState('');
   const cameraRef = useRef<any>(null);
   const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cameraViewSizeRef = useRef({ width: 0, height: 0 });
@@ -115,7 +118,7 @@ export default function ScanProductScreen() {
         result = await simulateMockDetection();
       } else {
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.5,
+          quality: 0.72,   // was 0.5 — higher quality = more accurate YOLO detection
           base64: false,
           skipProcessing: true,
         });
@@ -401,6 +404,31 @@ export default function ScanProductScreen() {
         </View>
       </CameraView>
 
+      {showSearch && (
+        <View style={styles.searchOverlay}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="e.g. NYX Butter Gloss"
+            placeholderTextColor="#aaa"
+            value={searchText}
+            onChangeText={setSearchText}
+            autoFocus
+          />
+          <TouchableOpacity
+            style={styles.searchGo}
+            onPress={() => {
+              setShowSearch(false);
+              router.push({ pathname: '/tryon', params: { productType: 'lipstick', productName: searchText } });
+            }}
+          >
+            <Text style={styles.searchGoText}>Try On</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowSearch(false)} style={styles.searchCancel}>
+            <Text style={styles.searchCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.controls}>
         <TouchableOpacity
           style={styles.controlButton}
@@ -413,6 +441,12 @@ export default function ScanProductScreen() {
           onPress={() => { setDetections([]); setSelectedProduct(null); setSelectedLookTypes([]); }}
         >
           <Text style={styles.controlButtonText}>Clear</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => { setSearchText(''); setShowSearch(true); }}
+        >
+          <Text style={styles.controlButtonText}>Search</Text>
         </TouchableOpacity>
       </View>
 
@@ -521,6 +555,12 @@ const styles = StyleSheet.create({
   tryLookButton: { backgroundColor: PINK, borderRadius: 18, paddingVertical: 11, alignItems: 'center' },
   tryLookButtonDisabled: { opacity: 0.45 },
   tryLookButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  searchOverlay: { position: 'absolute', bottom: 80, left: 16, right: 16, backgroundColor: 'rgba(0,0,0,0.85)', borderRadius: 16, padding: 14, gap: 10, zIndex: 50 },
+  searchInput: { backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: '#1A1A1A' },
+  searchGo: { backgroundColor: '#C2185B', borderRadius: 10, paddingVertical: 11, alignItems: 'center' },
+  searchGoText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  searchCancel: { alignItems: 'center', paddingVertical: 6 },
+  searchCancelText: { color: 'rgba(255,255,255,0.6)', fontSize: 13 },
   permissionText: { color: '#fff', textAlign: 'center', marginTop: 40 },
   errorText: { fontSize: 18, color: '#F44336', textAlign: 'center', marginBottom: 10, marginTop: 40 },
   errorSubtext: { fontSize: 14, color: '#666', textAlign: 'center' },
