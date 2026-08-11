@@ -227,9 +227,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Firebase mutates `currentUser` in place and does not fire onAuthStateChanged
   // for profile edits, so `user` state needs a manual nudge to reflect the new
-  // name. Spreading preserves the bound instance methods (getIdToken, reload,
-  // etc.) the modular SDK attaches as own properties, so callers relying on
-  // those (the token getter effect above) keep working against the new object.
+  // name. A plain `{ ...auth.currentUser }` spread is NOT safe here: getIdToken/
+  // reload/etc. are defined on UserImpl.prototype, not as own properties, so a
+  // spread silently drops them and breaks every authenticated request made with
+  // the resulting object (the token getter effect below calls user.getIdToken()).
+  // Object.create + Object.assign copies the own data properties while keeping
+  // the same prototype, so those methods keep resolving correctly, and it's
+  // still a new reference so React actually re-renders.
   const updateDisplayName = useCallback(async (displayName: string) => {
     const auth = getFirebaseAuth();
     if (!auth?.currentUser) {
@@ -241,7 +245,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       await updateFirebaseProfile(auth.currentUser, { displayName: trimmed });
-      setUser({ ...auth.currentUser } as User);
+      const proto = Object.getPrototypeOf(auth.currentUser);
+      setUser(Object.assign(Object.create(proto), auth.currentUser) as User);
     } catch (e) {
       throw new Error(friendlyAuthError(e));
     }
