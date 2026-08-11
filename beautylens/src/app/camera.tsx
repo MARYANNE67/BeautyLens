@@ -54,6 +54,23 @@ import {
 } from '../utils/faceGeometry';
 import type { FaceMeshResult, ImageShape } from '../types';
 
+// On-device face tracking is only available in builds that include the
+// native vision-camera + mediapipe modules (dev/EAS builds, not Expo Go),
+// and react-native-mediapipe throws AT IMPORT TIME when that runtime is
+// missing -- so this must be a guarded require, never a static import.
+// When it fails, OnDeviceTracker stays null and the screen runs the
+// original server polling pipeline unchanged.
+type OnDeviceTrackerModule = typeof import('../components/OnDeviceFaceTracker');
+let OnDeviceTracker: OnDeviceTrackerModule | null = null;
+if (FeatureFlags.ON_DEVICE_FACE_TRACKING) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    OnDeviceTracker = require('../components/OnDeviceFaceTracker');
+  } catch {
+    OnDeviceTracker = null;
+  }
+}
+
 const API_BASE_URL = __DEV__ ? AppConfig.API_BASE_URL_DEV : AppConfig.API_BASE_URL_PROD;
 const FACE_DETECTION_INTERVAL = 250;
 const FACE_CAPTURE_QUALITY = 0.45;
@@ -340,13 +357,64 @@ export default function FaceCameraScreen() {
 
 
 
+  // Face-shape learning, shared by the server polling path and the
+  // on-device tracker: sample until locked (see the constants above).
+  const sampleFaceShape = (landmarks: FaceMeshResult['landmarks']) => {
+    if (detectedFaceShapeRef.current) return;
+    if (faceShapeLearningStartedAtRef.current === null) {
+      faceShapeLearningStartedAtRef.current = Date.now();
+    }
+    const sampledShape = classifyFaceShape(landmarks);
+    if (sampledShape) {
+      faceShapeSamplesRef.current.push(sampledShape);
+    }
+
+    const samples = faceShapeSamplesRef.current;
+    const elapsed = Date.now() - faceShapeLearningStartedAtRef.current;
+    const unanimous =
+      samples.length >= FACE_SHAPE_EARLY_LOCK_SAMPLES &&
+      samples.every((s) => s === samples[0]);
+    if (unanimous || (elapsed >= FACE_SHAPE_LEARNING_DURATION_MS && samples.length > 0)) {
+      const lockedShape = mostFrequentFaceShape(samples);
+      detectedFaceShapeRef.current = lockedShape;
+      setDetectedFaceShape(lockedShape);
+    }
+  };
+
+  // Every processed frame from the on-device tracker arrives here already
+  // shaped like a server /detect-face-mesh response (see
+  // OnDeviceFaceTracker.tsx), so the whole downstream pipeline is shared.
+  // Hairline detection stays server-side and is skipped on this path for
+  // now -- the hairline zones fall back to the landmark approximation.
+  const handleOnDeviceMesh = React.useCallback((result: FaceMeshResult) => {
+    if (result.image_dimensions) {
+      setPhotoDimensions(result.image_dimensions);
+    }
+    setFaceMeshData(result);
+    persistentMeshDataRef.current = result;
+    setFaceDetected(true);
+    sampleFaceShape(result.landmarks);
+  }, []);
+
+  const handleOnDeviceNoFace = React.useCallback(() => {
+    // Keep the last mesh visible (same anti-blink pattern as the server
+    // path) -- only the status flips.
+    setFaceDetected(false);
+  }, []);
+
   const startFaceDetection = React.useCallback(() => {
     if (!FeatureFlags.ENABLE_FACE_MESH) return;
+    // The on-device tracker pushes landmarks per frame; no polling loop.
+    if (OnDeviceTracker) return;
     detectionIntervalRef.current = setInterval(() => {
       if (!isDetectingRef.current && cameraRef.current) {
         detectFace();
       }
     }, FACE_DETECTION_INTERVAL);
+    // detectFace is declared later in the component (const, so it would be
+    // in the temporal dead zone if listed as a dependency) and only called
+    // after mount from the interval -- safe to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useFocusEffect(
@@ -383,11 +451,23 @@ export default function FaceCameraScreen() {
         detectionIntervalRef.current = null;
       }
 
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.92,
-        base64: false,
-        skipProcessing: false,
-      });
+      // vision-camera (on-device path) and expo-camera expose different
+      // capture APIs; normalize both to { uri, width, height }.
+      let photo: { uri: string; width: number; height: number } | null = null;
+      if (OnDeviceTracker) {
+        const p = await cameraRef.current.takePhoto();
+        photo = {
+          uri: p.path.startsWith('file://') ? p.path : `file://${p.path}`,
+          width: p.width,
+          height: p.height,
+        };
+      } else {
+        photo = await cameraRef.current.takePictureAsync({
+          quality: 0.92,
+          base64: false,
+          skipProcessing: false,
+        });
+      }
 
       if (!photo?.uri) return;
 
@@ -540,26 +620,7 @@ export default function FaceCameraScreen() {
           persistentMeshDataRef.current = result;
           setFaceDetected(true);
 
-          if (!detectedFaceShapeRef.current) {
-            if (faceShapeLearningStartedAtRef.current === null) {
-              faceShapeLearningStartedAtRef.current = Date.now();
-            }
-            const sampledShape = classifyFaceShape(result.landmarks);
-            if (sampledShape) {
-              faceShapeSamplesRef.current.push(sampledShape);
-            }
-
-            const samples = faceShapeSamplesRef.current;
-            const elapsed = Date.now() - faceShapeLearningStartedAtRef.current;
-            const unanimous =
-              samples.length >= FACE_SHAPE_EARLY_LOCK_SAMPLES &&
-              samples.every((s) => s === samples[0]);
-            if (unanimous || (elapsed >= FACE_SHAPE_LEARNING_DURATION_MS && samples.length > 0)) {
-              const lockedShape = mostFrequentFaceShape(samples);
-              detectedFaceShapeRef.current = lockedShape;
-              setDetectedFaceShape(lockedShape);
-            }
-          }
+          sampleFaceShape(result.landmarks);
 
           if (!hairlineFetchTriggeredRef.current) {
             hairlineFetchTriggeredRef.current = true;
@@ -894,15 +955,34 @@ export default function FaceCameraScreen() {
       <View style={styles.container}>
         <StatusBar style="light" />
 
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing={cameraType}
-          onLayout={(event) => {
-            const { width, height } = event.nativeEvent.layout;
-            setCameraViewDimensions({ width, height });
-          }}
-        />
+        {OnDeviceTracker ? (
+          // Wrapper View owns the layout measurement -- MediapipeCamera
+          // uses onLayout internally for its own frame mapping.
+          <View
+            style={styles.camera}
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              setCameraViewDimensions({ width, height });
+            }}
+          >
+            <OnDeviceTracker.OnDeviceFaceCamera
+              ref={cameraRef}
+              style={{ flex: 1 }}
+              onFaceMesh={handleOnDeviceMesh}
+              onNoFace={handleOnDeviceNoFace}
+            />
+          </View>
+        ) : (
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing={cameraType}
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              setCameraViewDimensions({ width, height });
+            }}
+          />
+        )}
 
         <View style={styles.cameraOverlay} pointerEvents="box-none">
           <View style={styles.productInfoOverlay} pointerEvents="none">

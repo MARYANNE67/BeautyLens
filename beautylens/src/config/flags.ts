@@ -22,6 +22,13 @@ export const FeatureFlags = {
   // instead of guessing which landmark is misplaced. AND-ed with __DEV__ at
   // the call site like DEV_BYPASS_LOGIN above.
   DEV_LANDMARK_DEBUG: true,
+  // Use the on-device face tracker (vision-camera + react-native-mediapipe
+  // frame processor) instead of the server polling pipeline. Only takes
+  // effect in builds that include the native modules (dev/EAS builds) --
+  // in Expo Go the guarded require in camera.tsx fails and the screen
+  // falls back to the server pipeline automatically, so leaving this on
+  // is safe everywhere.
+  ON_DEVICE_FACE_TRACKING: true,
 } as const;
 
 export type FeatureFlagKey = keyof typeof FeatureFlags;

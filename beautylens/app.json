@@ -7,10 +7,16 @@
     "icon": "./assets/images/icon.png",
     "scheme": "beautylens",
     "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.beautylens.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "BeautyLens uses the camera to detect your face and show makeup placement guidance."
+      }
     },
     "android": {
+      "package": "com.beautylens.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -34,16 +40,22 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "BeautyLens uses the camera to detect your face and show makeup placement guidance."
+        }
+      ],
+      "./plugins/withMediapipeModel.js"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
-  "extra": {
-  "apiBaseUrlDev": "http://10.0.0.234:8000",
-  "apiBaseUrlProd": "https://your-production-api.com"
-  }
+    "extra": {
+      "apiBaseUrlDev": "http://10.0.0.234:8000",
+      "apiBaseUrlProd": "https://your-production-api.com"
+    }
   }
 }
-
