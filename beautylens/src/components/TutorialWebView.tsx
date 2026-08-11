@@ -34,7 +34,7 @@ export type PlacementCategory = 'contour' | 'concealer' | 'highlighter' | 'blush
 export type FaceShape = 'oval' | 'round' | 'square' | 'heart' | 'long';
 
 export const CATEGORY_COLOR: Record<PlacementCategory, string> = {
-  contour: '#8A5A44',
+  contour: '#D98A4E',
   concealer: '#F5D9B8',
   highlighter: '#F5E6A3',
   blush: '#E8748A',
@@ -59,6 +59,7 @@ export interface TutorialWebViewProps {
    *  resolved (i.e. the face shape has locked in). Empty while nothing is
    *  active or the shape hasn't locked yet. */
   onLabels?: (items: TutorialLabelItem[]) => void;
+  onCaptured?: (base64DataUrl: string) => void;
   style?: object;
 }
 
@@ -66,6 +67,7 @@ export interface TutorialWebViewRef {
   /** Turns a single category's overlay on or off; other active categories
    *  keep drawing untouched, so multiple can be layered at once. */
   setCategory(category: PlacementCategory, active: boolean): void;
+  capture(): void;
 }
 
 function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
@@ -143,7 +145,7 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
     var RIGHT_UNDER_EYE_INDICES = [253,254,255,339,446,261,448,449,450,451,452,453];
 
     var CATEGORY_COLOR = {
-      contour: '#8A5A44',
+      contour: '#D98A4E',
       concealer: '#F5D9B8',
       highlighter: '#F5E6A3',
       blush: '#E8748A',
@@ -168,7 +170,7 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
           { key:'contour-left-hollow', kind:'band', opacity:0.55, strokeWidth:10, source:{ sequence:[LEFT_HOLLOW, { interpolate:{ a:LEFT_CHEEK_HOLLOW_INDEX, b:LEFT_MOUTH_CORNER_INDEX, t:0.55 } }] } },
           { key:'contour-right-hollow', kind:'band', opacity:0.55, strokeWidth:10, source:{ sequence:[RIGHT_HOLLOW, { interpolate:{ a:RIGHT_CHEEK_HOLLOW_INDEX, b:RIGHT_MOUTH_CORNER_INDEX, t:0.55 } }] } }
         ] },
-        square: { label: 'Soften jaw corners + temples — light diagonal strokes only', zones: [
+        square: { label: 'Soften jaw corners + temples, light diagonal strokes only', zones: [
           { key:'contour-left-hollow', kind:'band', opacity:0.4, strokeWidth:8, source:{ sequence:[LEFT_HOLLOW, { interpolate:{ a:LEFT_CHEEK_HOLLOW_INDEX, b:LEFT_MOUTH_CORNER_INDEX, t:0.55 } }] } },
           { key:'contour-right-hollow', kind:'band', opacity:0.4, strokeWidth:8, source:{ sequence:[RIGHT_HOLLOW, { interpolate:{ a:RIGHT_CHEEK_HOLLOW_INDEX, b:RIGHT_MOUTH_CORNER_INDEX, t:0.55 } }] } },
           { key:'contour-left-temple', kind:'band', opacity:0.3, strokeWidth:6, source:{ sequence:[{ indices:[LEFT_TEMPLE_INDEX] }, { indices:[LEFT_JAW_CORNER_INDEX] }] } },
@@ -178,7 +180,7 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
           { key:'contour-left-forehead-side', kind:'band', opacity:0.5, strokeWidth:8, source:{ sequence:[{ indices:[LEFT_TEMPLE_INDEX] }, { hairlineOr:{ keys:['left'], fallback:{ newRegion:'left_forehead_side' } } }] } },
           { key:'contour-right-forehead-side', kind:'band', opacity:0.5, strokeWidth:8, source:{ sequence:[{ indices:[RIGHT_TEMPLE_INDEX] }, { hairlineOr:{ keys:['right'], fallback:{ newRegion:'right_forehead_side' } } }] } }
         ] },
-        long: { label: 'Contour hairline + jaw + chin to shorten — skip vertical lines', zones: [
+        long: { label: 'Contour hairline + jaw + chin to shorten, skip vertical lines', zones: [
           { key:'contour-forehead', kind:'band', opacity:0.4, strokeWidth:8, source:{ hairlineOr:{ keys:['left','center','right'], fallback:{ newRegion:'forehead' } } } },
           { key:'contour-jawline', kind:'band', opacity:0.35, strokeWidth:8, source:{ newRegion:'jawline' } },
           { key:'contour-chin', kind:'band', opacity:0.35, strokeWidth:6, source:{ newRegion:'chin' } }
@@ -198,40 +200,46 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
         return { oval:rule, round:rule, square:rule, heart:rule, long:rule };
       })(),
 
+      // Opacities here are deliberately lower than the other categories' --
+      // highlighter markers read as a soft sheen, not a solid patch, and the
+      // cupid's-bow marker in particular sits right on the top lip (a real,
+      // sourced technique -- dabbing highlighter there for a fuller-lip
+      // illusion -- not a placement bug), so it gets a smaller radius too so
+      // it doesn't visually cover the lip at the larger global marker scale.
       highlighter: {
         oval: { label: "Highlight: cheekbones, nose bridge, cupid's bow, chin, under-eyes", zones: [
-          { key:'highlighter-left-cheekbone', kind:'marker', opacity:0.7, radius:9, source:LEFT_CHEEK_MARKER },
-          { key:'highlighter-right-cheekbone', kind:'marker', opacity:0.7, radius:9, source:RIGHT_CHEEK_MARKER },
-          { key:'highlighter-nose-bridge', kind:'marker', opacity:0.6, radius:6, source:{ indices:[NOSE_BRIDGE_INDEX] } },
-          { key:'highlighter-cupids-bow', kind:'marker', opacity:0.6, radius:6, source:{ indices:[CUPIDS_BOW_INDEX] } },
-          { key:'highlighter-chin', kind:'marker', opacity:0.6, radius:8, source:{ indices:[CHIN_BUTTON_INDEX] } },
-          { key:'highlighter-left-under-eye', kind:'band', opacity:0.3, strokeWidth:6, source:{ regionToward:{ region:'left_under_eye', toward:LEFT_MOUTH_CORNER_INDEX, t:0.09 } } },
-          { key:'highlighter-right-under-eye', kind:'band', opacity:0.3, strokeWidth:6, source:{ regionToward:{ region:'right_under_eye', toward:RIGHT_MOUTH_CORNER_INDEX, t:0.09 } } }
+          { key:'highlighter-left-cheekbone', kind:'marker', opacity:0.4, radius:9, source:LEFT_CHEEK_MARKER },
+          { key:'highlighter-right-cheekbone', kind:'marker', opacity:0.4, radius:9, source:RIGHT_CHEEK_MARKER },
+          { key:'highlighter-nose-bridge', kind:'marker', opacity:0.32, radius:6, source:{ indices:[NOSE_BRIDGE_INDEX] } },
+          { key:'highlighter-cupids-bow', kind:'marker', opacity:0.3, radius:3.5, source:{ indices:[CUPIDS_BOW_INDEX] } },
+          { key:'highlighter-chin', kind:'marker', opacity:0.32, radius:8, source:{ indices:[CHIN_BUTTON_INDEX] } },
+          { key:'highlighter-left-under-eye', kind:'band', opacity:0.18, strokeWidth:6, source:{ regionToward:{ region:'left_under_eye', toward:LEFT_MOUTH_CORNER_INDEX, t:0.09 } } },
+          { key:'highlighter-right-under-eye', kind:'band', opacity:0.18, strokeWidth:6, source:{ regionToward:{ region:'right_under_eye', toward:RIGHT_MOUTH_CORNER_INDEX, t:0.09 } } }
         ] },
         round: { label: 'Highlight cheekbones, blending up toward temples to lift', zones: [
-          { key:'highlighter-left-cheek-lift', kind:'band', opacity:0.5, strokeWidth:8, source:{ sequence:[LEFT_CHEEK_MARKER, { indices:[LEFT_TEMPLE_INDEX] }] } },
-          { key:'highlighter-right-cheek-lift', kind:'band', opacity:0.5, strokeWidth:8, source:{ sequence:[RIGHT_CHEEK_MARKER, { indices:[RIGHT_TEMPLE_INDEX] }] } },
-          { key:'highlighter-cupids-bow', kind:'marker', opacity:0.6, radius:6, source:{ indices:[CUPIDS_BOW_INDEX] } },
-          { key:'highlighter-chin', kind:'marker', opacity:0.6, radius:8, source:{ indices:[CHIN_BUTTON_INDEX] } }
+          { key:'highlighter-left-cheek-lift', kind:'band', opacity:0.3, strokeWidth:8, source:{ sequence:[LEFT_CHEEK_MARKER, { indices:[LEFT_TEMPLE_INDEX] }] } },
+          { key:'highlighter-right-cheek-lift', kind:'band', opacity:0.3, strokeWidth:8, source:{ sequence:[RIGHT_CHEEK_MARKER, { indices:[RIGHT_TEMPLE_INDEX] }] } },
+          { key:'highlighter-cupids-bow', kind:'marker', opacity:0.3, radius:3.5, source:{ indices:[CUPIDS_BOW_INDEX] } },
+          { key:'highlighter-chin', kind:'marker', opacity:0.32, radius:8, source:{ indices:[CHIN_BUTTON_INDEX] } }
         ] },
         square: { label: 'Highlight cheekbones + nose bridge + chin for radiance', zones: [
-          { key:'highlighter-left-cheekbone', kind:'marker', opacity:0.7, radius:9, source:LEFT_CHEEK_MARKER },
-          { key:'highlighter-right-cheekbone', kind:'marker', opacity:0.7, radius:9, source:RIGHT_CHEEK_MARKER },
-          { key:'highlighter-nose-bridge', kind:'marker', opacity:0.6, radius:6, source:{ indices:[NOSE_BRIDGE_INDEX] } },
-          { key:'highlighter-chin', kind:'marker', opacity:0.5, radius:7, source:{ indices:[CHIN_BUTTON_INDEX] } }
+          { key:'highlighter-left-cheekbone', kind:'marker', opacity:0.4, radius:9, source:LEFT_CHEEK_MARKER },
+          { key:'highlighter-right-cheekbone', kind:'marker', opacity:0.4, radius:9, source:RIGHT_CHEEK_MARKER },
+          { key:'highlighter-nose-bridge', kind:'marker', opacity:0.32, radius:6, source:{ indices:[NOSE_BRIDGE_INDEX] } },
+          { key:'highlighter-chin', kind:'marker', opacity:0.28, radius:7, source:{ indices:[CHIN_BUTTON_INDEX] } }
         ] },
         heart: { label: 'Highlight the chin to add balance, plus the cheekbones', zones: [
-          { key:'highlighter-left-cheekbone', kind:'marker', opacity:0.65, radius:8, source:LEFT_CHEEK_MARKER },
-          { key:'highlighter-right-cheekbone', kind:'marker', opacity:0.65, radius:8, source:RIGHT_CHEEK_MARKER },
-          { key:'highlighter-chin', kind:'marker', opacity:0.7, radius:11, source:{ indices:[CHIN_BUTTON_INDEX] } },
-          { key:'highlighter-cupids-bow', kind:'marker', opacity:0.6, radius:6, source:{ indices:[CUPIDS_BOW_INDEX] } }
+          { key:'highlighter-left-cheekbone', kind:'marker', opacity:0.36, radius:8, source:LEFT_CHEEK_MARKER },
+          { key:'highlighter-right-cheekbone', kind:'marker', opacity:0.36, radius:8, source:RIGHT_CHEEK_MARKER },
+          { key:'highlighter-chin', kind:'marker', opacity:0.4, radius:11, source:{ indices:[CHIN_BUTTON_INDEX] } },
+          { key:'highlighter-cupids-bow', kind:'marker', opacity:0.3, radius:3.5, source:{ indices:[CUPIDS_BOW_INDEX] } }
         ] },
         long: { label: 'Highlight chin + cheekbones; sweep under-eyes toward temples to widen', zones: [
-          { key:'highlighter-left-cheekbone', kind:'marker', opacity:0.65, radius:9, source:LEFT_CHEEK_MARKER },
-          { key:'highlighter-right-cheekbone', kind:'marker', opacity:0.65, radius:9, source:RIGHT_CHEEK_MARKER },
-          { key:'highlighter-chin', kind:'marker', opacity:0.65, radius:11, source:{ indices:[CHIN_BUTTON_INDEX] } },
-          { key:'highlighter-left-under-eye-wide', kind:'band', opacity:0.35, strokeWidth:8, source:{ sequence:[{ regionToward:{ region:'left_under_eye', toward:LEFT_MOUTH_CORNER_INDEX, t:0.09 } }, { indices:[LEFT_TEMPLE_INDEX] }] } },
-          { key:'highlighter-right-under-eye-wide', kind:'band', opacity:0.35, strokeWidth:8, source:{ sequence:[{ regionToward:{ region:'right_under_eye', toward:RIGHT_MOUTH_CORNER_INDEX, t:0.09 } }, { indices:[RIGHT_TEMPLE_INDEX] }] } }
+          { key:'highlighter-left-cheekbone', kind:'marker', opacity:0.36, radius:9, source:LEFT_CHEEK_MARKER },
+          { key:'highlighter-right-cheekbone', kind:'marker', opacity:0.36, radius:9, source:RIGHT_CHEEK_MARKER },
+          { key:'highlighter-chin', kind:'marker', opacity:0.36, radius:11, source:{ indices:[CHIN_BUTTON_INDEX] } },
+          { key:'highlighter-left-under-eye-wide', kind:'band', opacity:0.2, strokeWidth:8, source:{ sequence:[{ regionToward:{ region:'left_under_eye', toward:LEFT_MOUTH_CORNER_INDEX, t:0.09 } }, { indices:[LEFT_TEMPLE_INDEX] }] } },
+          { key:'highlighter-right-under-eye-wide', kind:'band', opacity:0.2, strokeWidth:8, source:{ sequence:[{ regionToward:{ region:'right_under_eye', toward:RIGHT_MOUTH_CORNER_INDEX, t:0.09 } }, { indices:[RIGHT_TEMPLE_INDEX] }] } }
         ] }
       },
 
@@ -240,11 +248,11 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
           { key:'blush-left-cheek', kind:'marker', opacity:0.5, radius:14, source:LEFT_CHEEK_MARKER },
           { key:'blush-right-cheek', kind:'marker', opacity:0.5, radius:14, source:RIGHT_CHEEK_MARKER }
         ] },
-        round: { label: 'Blush: straight line from ear toward center, along the cheekbone — skip the apples', zones: [
+        round: { label: 'Blush: straight line from ear toward center, along the cheekbone, skip the apples', zones: [
           { key:'blush-left-line', kind:'band', opacity:0.5, strokeWidth:10, source:{ sequence:[{ indices:[LEFT_TEMPLE_INDEX] }, LEFT_CHEEK_MARKER] } },
           { key:'blush-right-line', kind:'band', opacity:0.5, strokeWidth:10, source:{ sequence:[{ indices:[RIGHT_TEMPLE_INDEX] }, RIGHT_CHEEK_MARKER] } }
         ] },
-        square: { label: 'Blush: soft, rounded on the apples — avoid sharp diagonal lines', zones: [
+        square: { label: 'Blush: soft, rounded on the apples, avoid sharp diagonal lines', zones: [
           { key:'blush-left-cheek', kind:'marker', opacity:0.45, radius:18, source:LEFT_CHEEK_MARKER },
           { key:'blush-right-cheek', kind:'marker', opacity:0.45, radius:18, source:RIGHT_CHEEK_MARKER }
         ] },
@@ -252,7 +260,7 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
           { key:'blush-left-up', kind:'band', opacity:0.5, strokeWidth:9, source:{ sequence:[LEFT_CHEEK_MARKER, { indices:[LEFT_TEMPLE_INDEX] }] } },
           { key:'blush-right-up', kind:'band', opacity:0.5, strokeWidth:9, source:{ sequence:[RIGHT_CHEEK_MARKER, { indices:[RIGHT_TEMPLE_INDEX] }] } }
         ] },
-        long: { label: "Blush: short straight line on the apples — don't blend too far out", zones: [
+        long: { label: "Blush: short straight line on the apples, don't blend too far out", zones: [
           { key:'blush-left-line', kind:'band', opacity:0.4, strokeWidth:8, source:{ sequence:[{ indices:[LEFT_TEMPLE_INDEX] }, LEFT_CHEEK_MARKER] } },
           { key:'blush-right-line', kind:'band', opacity:0.4, strokeWidth:8, source:{ sequence:[{ indices:[RIGHT_TEMPLE_INDEX] }, RIGHT_CHEEK_MARKER] } }
         ] }
@@ -273,7 +281,7 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
           { key:'bronzer-jawline', kind:'band', opacity:0.4, strokeWidth:10, source:{ newRegion:'jawline' } },
           { key:'bronzer-chin', kind:'band', opacity:0.4, strokeWidth:8, source:{ newRegion:'chin' } }
         ] },
-        heart: { label: 'Bronzer: general sweep — temple, cheek hollow, jaw', zones: [
+        heart: { label: 'Bronzer: general sweep, temple, cheek hollow, jaw', zones: [
           { key:'bronzer-left-sweep', kind:'band', opacity:0.45, strokeWidth:12, source:{ sequence:[{ indices:[LEFT_TEMPLE_INDEX] }, LEFT_HOLLOW, { indices:[LEFT_JAW_CORNER_INDEX] }] } },
           { key:'bronzer-right-sweep', kind:'band', opacity:0.45, strokeWidth:12, source:{ sequence:[{ indices:[RIGHT_TEMPLE_INDEX] }, RIGHT_HOLLOW, { indices:[RIGHT_JAW_CORNER_INDEX] }] } }
         ] },
@@ -544,7 +552,7 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
           }
           maybeSendLabels();
         } else {
-          if(faceDetected) setPill('Face lost — move closer',false);
+          if(faceDetected) setPill('Face lost, move closer',false);
         }
       });
 
@@ -571,6 +579,12 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
           else { delete activeCategories[msg.category]; }
           lastLabelsKey = null; // force re-send so RN's labels update immediately
           maybeSendLabels();
+        } else if(msg.type==='capture'){
+          var prevTransform = canvasEl.style.transform;
+          canvasEl.style.transform = 'none';
+          var dataUrl = canvasEl.toDataURL('image/jpeg',0.92);
+          canvasEl.style.transform = prevTransform;
+          rnPost({type:'captured', data:dataUrl});
         }
       }
       window.addEventListener('message',   handleMsg);
@@ -585,7 +599,7 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const TutorialWebView = forwardRef<TutorialWebViewRef, TutorialWebViewProps>(
-  ({ initialCategories, onReady, onError, onShapeLocked, onLabels, style }, ref) => {
+  ({ initialCategories, onReady, onError, onShapeLocked, onLabels, onCaptured, style }, ref) => {
     const webViewRef = useRef<WebView>(null);
 
     const send = useCallback((payload: object) => {
@@ -600,6 +614,7 @@ const TutorialWebView = forwardRef<TutorialWebViewRef, TutorialWebViewProps>(
     useImperativeHandle(ref, () => ({
       setCategory: (category: PlacementCategory, active: boolean) =>
         send({ type: 'setCategory', category, active }),
+      capture: () => send({ type: 'capture' }),
     }));
 
     const handleMessage = useCallback(
@@ -612,10 +627,11 @@ const TutorialWebView = forwardRef<TutorialWebViewRef, TutorialWebViewProps>(
           case 'error':        onError?.(msg.message as string);                break;
           case 'shapeLocked':  onShapeLocked?.(msg.shape as FaceShape);          break;
           case 'labels':       onLabels?.(msg.items as TutorialLabelItem[]);    break;
+          case 'captured':     onCaptured?.(msg.data as string);                break;
           default: break;
         }
       },
-      [onReady, onError, onShapeLocked, onLabels]
+      [onReady, onError, onShapeLocked, onLabels, onCaptured]
     );
 
     // Built once at mount, deliberately not reactive to initialCategories

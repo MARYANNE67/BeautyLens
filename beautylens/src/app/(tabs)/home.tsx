@@ -177,7 +177,7 @@ export default function HomeScreen() {
             <View style={styles.featureIcon}>
               <Ionicons name="contrast-outline" size={20} color={PINK} />
             </View>
-            <Text style={styles.featureTitle}>Face Shape Tutorial</Text>
+            <Text style={styles.featureTitle}>Makeup Placement Tutorial</Text>
             <Text style={styles.featureBody}>
               Live placement guidance for contour, blush and more, tailored to your face shape.
             </Text>
