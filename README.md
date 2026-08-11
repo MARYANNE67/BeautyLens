@@ -25,3 +25,30 @@ BeautyLens is a computer vision and augmented reality application that allows us
 The system is built on a YOLOv8s object-detection model fine-tuned on a 2,715-image, 19-class makeup dataset, a MediaPipe Face Mesh engine returning 468 3D facial landmarks, a FastAPI backend, and a React Native mobile application. The application is being developed to production standards suitable for deployment in a real beauty retail environment.
 
 The codebase originates from the SkillCred project developed in Capstone I. The FastAPI backend, Docker Compose deployment, SQLite persistence layer, and project management artefacts all transfer directly into BeautyLens. Capstone II focuses on completing the AR try-on feature, reaching production-grade model accuracy (mAP@0.5 ≥ 0.70), and delivering a UI and user experience suitable for a live beauty store deployment.
+
+## Features
+
+- **Product detection**: point the camera at a makeup product for real-time YOLOv8s detection, with OCR brand/shade recognition (Google Vision API) as a fallback when the visual match is uncertain.
+- **Skin scan & shade matching**: a guided front/left/right capture estimates skin depth and undertone, then returns cross-brand foundation/concealer recommendations, refined by the user's beauty profile (skin type, coverage, finish, budget).
+- **Live AR virtual try-on**: real-time lipstick, eyeshadow, eyeliner, mascara, blush, and foundation overlays, rendered entirely client-side via MediaPipe face tracking (no per-frame server round-trip).
+- **Face-shape placement tutorial**: live contour/concealer/highlighter/blush/bronzer placement guidance, keyed to a face shape classified from measured facial ratios, with the same client-side face-tracking approach as AR try-on.
+- **Collection tracking**: save shades from recommendations, track opened/printed expiry dates, and get reminders before a product should be retired.
+- **Accounts**: Firebase authentication with an editable profile (display name, beauty preferences).
+
+## Firebase Setup
+
+Auth is Firebase on both the backend and the app, and the app will not start without it.
+
+```bash
+cd beautylens
+cp .env.example .env
+```
+
+`.env.example` documents every variable; two must be filled in:
+
+1. **Backend service account**: Firebase Console → Project settings → Service accounts → *Generate new private key*. Save the downloaded `.json` **outside the repo** and point `FIREBASE_CREDENTIALS_FILE` at its path. Without this, the server logs a setup error on startup and every authenticated endpoint returns `503`.
+2. **App web config**: Firebase Console → Project settings → Your apps → Web app (`</>`). Copy the six `EXPO_PUBLIC_FIREBASE_*` values in. These are not secrets. Restart Expo with `npx expo start -c` after changing them.
+
+Then enable **Email/Password** sign-in under Firebase Console → Authentication → Sign-in method.
+
+See `beautylens/development.md` for the rest of local setup (shade catalog, running the backend/frontend, etc.).
