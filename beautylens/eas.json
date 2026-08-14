@@ -9,10 +9,28 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDtPItFkryfZX2pPO9-UgGNreha0tMicpo",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "beautylens-65391.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "beautylens-65391",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "beautylens-65391.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "755171325261",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:755171325261:web:dba3c364fa228f483b7304",
+        "EXPO_PUBLIC_API_BASE_URL_PROD": "https://beautylens-api-755171325261.us-central1.run.app"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDtPItFkryfZX2pPO9-UgGNreha0tMicpo",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "beautylens-65391.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "beautylens-65391",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "beautylens-65391.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "755171325261",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:755171325261:web:dba3c364fa228f483b7304",
+        "EXPO_PUBLIC_API_BASE_URL_PROD": "https://beautylens-api-755171325261.us-central1.run.app"
+      }
     }
   },
   "submit": {
