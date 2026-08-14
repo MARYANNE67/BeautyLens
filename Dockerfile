@@ -8,9 +8,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# HF Spaces runs containers as uid 1000 without root; create that user and
-# keep everything under its home so all paths stay writable.
-RUN useradd -m -u 1000 user
+# Run as a non-root user; keep everything under its home so all paths stay
+# writable. The app dir is created and chowned EXPLICITLY while still root:
+# WORKDIR creates missing directories root-owned on classic builders (only
+# BuildKit >= Docker 23 chowns them to the active USER), which made an image
+# built by Cloud Build fail at runtime with mkdir permission errors while
+# the identical Dockerfile worked locally.
+RUN useradd -m -u 1000 user && mkdir -p /home/user/app && chown -R user:user /home/user
 USER user
 ENV HOME=/home/user \
     PATH=/home/user/.local/bin:$PATH
