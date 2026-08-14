@@ -198,60 +198,67 @@ git diff <old-commit> <new-commit> -- package.json
 Any new entry there (other than a pure-JS/TypeScript-only package) is a signal
 to regenerate.
 
-## Deployment (Hugging Face Spaces, free tier)
+## Deployment (Google Cloud Run)
 
-The backend deploys as a Docker Space. The repo root has the `Dockerfile`,
-`.dockerignore`, and HF frontmatter in `README.md`; `beautylens/deploy/`
-has the container entrypoint and the artifact fetcher.
+The backend deploys as a Docker container on Cloud Run, in the same Google
+project as Firebase (`beautylens-65391`). Cloud Run scales to zero when
+idle, serves HTTPS automatically, and its always-free tier covers demo
+traffic. Note: Hugging Face Docker Spaces were evaluated first but now
+require a PRO subscription; the Docker image is host-agnostic either way.
 
-Two artifacts are deliberately not in git and are fetched from a Hugging
-Face **model repo** at container start (`deploy/fetch_artifacts.py`):
-the YOLO weights (`best.pt`) and the shade catalog
-(`shade_catalog_seed.json`).
-
-One-time setup (from the repo root, with the artifacts built locally):
-
-```bash
-pip install huggingface_hub
-huggingface-cli login                # paste a WRITE token from hf.co/settings/tokens
-huggingface-cli repo create beautylens-artifacts --type model
-huggingface-cli upload YOUR_USERNAME/beautylens-artifacts beautylens/models/final/best.pt best.pt
-huggingface-cli upload YOUR_USERNAME/beautylens-artifacts beautylens/data/shade_catalog_seed.json shade_catalog_seed.json
-```
-
-Create a **Docker Space** at huggingface.co/new-space, then in the Space's
-Settings add secrets:
-
-- `HF_MODEL_REPO` = `YOUR_USERNAME/beautylens-artifacts`
-- `HF_TOKEN` = a READ token (only if the artifact repo is private)
-- `FIREBASE_CREDENTIALS_JSON` = the whole service-account JSON on one line
-- `GOOGLE_VISION_API_KEY` = the Vision key (optional; OCR degrades gracefully)
-- `ALLOWED_ORIGINS` = origins allowed by CORS
-
-Do NOT set `ADMIN_ENDPOINTS_ENABLED` or `RATE_LIMIT_DISABLED` in
-production; the defaults (admin endpoints off, rate limiting on) are the
-safe ones.
-
-Deploy by pushing this repo to the Space:
+Model weights and the shade catalog are not in git; they are fetched at
+container start from the Hugging Face model repo named by `HF_MODEL_REPO`
+(see `beautylens/deploy/fetch_artifacts.py`). Upload them once:
 
 ```bash
-git remote add space https://huggingface.co/spaces/YOUR_USERNAME/beautylens-api
-git push space deploy/huggingface:main
+beautylens/.venv/bin/hf auth login
+beautylens/.venv/bin/hf repos create beautylens-artifacts --type model
+beautylens/.venv/bin/hf upload YOUR_HF_USER/beautylens-artifacts beautylens/models/final/best.pt best.pt
+beautylens/.venv/bin/hf upload YOUR_HF_USER/beautylens-artifacts beautylens/data/shade_catalog_seed.json shade_catalog_seed.json
 ```
 
-Then point the app at it and build:
+One-time Google setup: install the gcloud CLI, `gcloud auth login`, and
+make sure the project has billing enabled (required even for free-tier
+usage). Then, from the repo root:
+
+```bash
+gcloud config set project beautylens-65391
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+gcloud run deploy beautylens-api \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --memory 2Gi --cpu 2 \
+  --max-instances 1 \
+  --set-env-vars HF_MODEL_REPO=YOUR_HF_USER/beautylens-artifacts,FIREBASE_PROJECT_ID=beautylens-65391
+```
+
+Notes:
+
+- **No Firebase key file or secret**: on Cloud Run the backend uses
+  Application Default Credentials via the runtime service account -- the
+  ADC path `firebase_auth.py` already supports. `FIREBASE_PROJECT_ID` is
+  set explicitly so token verification knows its audience.
+- **`--max-instances 1` is required**, not just cost control: SQLite is a
+  single-writer store and the rate limiter is per-process.
+- The container listens on whatever `PORT` Cloud Run injects (the
+  entrypoint honours it), so no port flag is needed.
+- Do NOT set `ADMIN_ENDPOINTS_ENABLED` or `RATE_LIMIT_DISABLED`; the
+  defaults are the production-safe ones.
+- **Ephemeral storage**: Cloud Run's filesystem is in-memory and resets on
+  new instances. The shade catalog reseeds itself at startup; user
+  profiles/scans do not survive an instance restart. A managed database
+  (e.g. Cloud SQL, or a free Postgres) is the upgrade path.
+- Cold starts include the artifact fetch and model load (roughly 30-60s
+  after idle periods); `--min-instances 1` removes them but costs money.
+
+Then point the app at the printed service URL and build:
 
 ```bash
 # beautylens/.env
-EXPO_PUBLIC_API_BASE_URL_PROD=https://YOUR_USERNAME-beautylens-api.hf.space
+EXPO_PUBLIC_API_BASE_URL_PROD=https://beautylens-api-XXXXXXXX.us-central1.run.app
 npx eas build -p android --profile preview
 ```
-
-**Known limitation (free tier):** no persistent disk, so the SQLite
-database resets when the Space restarts. The shade catalog reseeds itself
-automatically at startup; user profiles and scans do not survive a
-restart. Attaching HF persistent storage (paid) and pointing
-`DATABASE_PATH` at the mount removes this limitation with no code change.
 
 ## Shade Matching Flow
 
