@@ -81,13 +81,13 @@ class TestBearerExtraction:
         verify.return_value = {"uid": "u1"}
         resp = client.get("/whoami", headers={"Authorization": "bearer tok"})
         assert resp.status_code == 200
-        verify.assert_called_once_with("tok")
+        verify.assert_called_once_with("tok", check_revoked=True)
 
     def test_token_is_stripped(self, verify):
         verify.return_value = {"uid": "u1"}
         resp = client.get("/whoami", headers={"Authorization": "Bearer  tok  "})
         assert resp.status_code == 200
-        verify.assert_called_once_with("tok")
+        verify.assert_called_once_with("tok", check_revoked=True)
 
 
 # ── Verification outcomes ─────────────────────────────────────────────────────

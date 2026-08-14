@@ -112,3 +112,71 @@ class TestLoadModelPathRestriction:
         r = client.post("/load-model", json={"model_file": "nonexistent.pt"})
         assert r.status_code == 404
         assert "nonexistent" not in r.json()["detail"]
+
+
+# ── Rate limiting (unit tests of the middleware itself) ─────────────────────
+# The shared conftest disables the middleware on the real app (the suite
+# would trip it); these tests build a tiny app with injected limits, a fake
+# clock, and a header-based key so identity and time are deterministic.
+
+from fastapi import FastAPI
+
+from src.api.rate_limit import RateLimitMiddleware
+
+
+def make_limited_client(limit=2, window=60):
+    app = FastAPI()
+
+    @app.get("/ping")
+    def ping():
+        return {"ok": True}
+
+    fake_time = {"now": 1000.0}
+    app.add_middleware(
+        RateLimitMiddleware,
+        limits={"/ping": limit},
+        window=window,
+        key_func=lambda request: request.headers.get("X-Client", "anon"),
+        clock=lambda: fake_time["now"],
+    )
+    return TestClient(app), fake_time
+
+
+class TestRateLimiting:
+    def test_requests_within_limit_pass(self):
+        client, _ = make_limited_client(limit=2)
+        assert client.get("/ping").status_code == 200
+        assert client.get("/ping").status_code == 200
+
+    def test_request_over_limit_is_429_with_retry_after(self):
+        client, _ = make_limited_client(limit=2)
+        client.get("/ping")
+        client.get("/ping")
+        r = client.get("/ping")
+        assert r.status_code == 429
+        assert int(r.headers["Retry-After"]) >= 1
+
+    def test_limit_is_per_client(self):
+        client, _ = make_limited_client(limit=1)
+        assert client.get("/ping", headers={"X-Client": "a"}).status_code == 200
+        # a is now exhausted, b is not
+        assert client.get("/ping", headers={"X-Client": "a"}).status_code == 429
+        assert client.get("/ping", headers={"X-Client": "b"}).status_code == 200
+
+    def test_window_expiry_frees_the_client(self):
+        client, fake_time = make_limited_client(limit=1, window=60)
+        assert client.get("/ping").status_code == 200
+        assert client.get("/ping").status_code == 429
+        fake_time["now"] += 61
+        assert client.get("/ping").status_code == 200
+
+    def test_unlisted_paths_are_never_limited(self):
+        client, _ = make_limited_client(limit=1)
+        app = client.app
+
+        @app.get("/free")
+        def free():
+            return {"ok": True}
+
+        for _ in range(5):
+            assert client.get("/free").status_code == 200

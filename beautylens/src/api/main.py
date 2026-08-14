@@ -114,6 +114,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rate-limit the unauthenticated detection endpoints (see rate_limit.py for
+# why and for the per-endpoint limits). RATE_LIMIT_DISABLED=1 switches it off
+# for tests and local development.
+if os.getenv("RATE_LIMIT_DISABLED") != "1":
+    from src.api.rate_limit import RateLimitMiddleware
+    app.add_middleware(RateLimitMiddleware)
+
 app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(skin_scan_router)

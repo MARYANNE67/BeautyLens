@@ -66,6 +66,13 @@ jobs:
             exit 1
           fi
 
+      - name: Secret scan (gitleaks)
+        # Catches keys/tokens committed in source files -- stronger than the
+        # .env check below, which only catches the whole file being added.
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Check for large model weight files (>5MB)
         run: |
           status=0
@@ -98,6 +105,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Dependency audit (npm audit, critical only)
+        # Moderate/high findings live in the Expo SDK 54 build toolchain and
+        # are accepted until the next SDK upgrade -- see docs/SecurityAudit.md
+        # Finding 5. Criticals always fail the build.
+        run: npm audit --audit-level=critical
 
       - name: TypeScript
         run: npx tsc --noEmit
@@ -137,6 +150,15 @@ jobs:
         env:
           PIP_NO_DEPS: "false"
           MEDIAPIPE_DISABLE_GPU: "1"
+
+      - name: Dependency audit (pip-audit)
+        # protobuf PYSEC-2026-1805/1806 are accepted: mediapipe 0.10.9 pins
+        # protobuf<4 and the fixes need >=4.25.8 -- see docs/SecurityAudit.md
+        # Finding 6. Everything else fails the build.
+        run: |
+          pip install -q pip-audit
+          pip-audit -r beautylens/requirements.txt --no-deps \
+            --ignore-vuln PYSEC-2026-1805 --ignore-vuln PYSEC-2026-1806
 
       - name: Pylint
         run: pylint beautylens/src/api/ --errors-only --ignored-modules=cv2,mediapipe

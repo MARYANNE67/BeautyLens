@@ -162,7 +162,12 @@ def get_current_user(request: Request) -> FirebaseUser:
     token = _extract_bearer_token(request)
 
     try:
-        decoded = firebase_auth_admin.verify_id_token(token)
+        # check_revoked is required for RevokedIdTokenError to ever be raised;
+        # without it the revoked-token branch below is dead code and a revoked
+        # token keeps working until its natural ~1h expiry. Costs one extra
+        # Firebase round-trip per verification -- acceptable at this app's
+        # authenticated traffic volume.
+        decoded = firebase_auth_admin.verify_id_token(token, check_revoked=True)
     except firebase_auth_admin.ExpiredIdTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
