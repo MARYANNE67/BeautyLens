@@ -609,7 +609,7 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
     // Set of currently-active categories -- several can draw at once, each
     // toggled independently via the 'setCategory' message below.
     var activeCategories = {};
-    (${JSON.stringify(initialCategories)}).forEach(function(c){ activeCategories[c] = true; });
+    (${JSON.stringify(initialCategories.filter((c) => c in CATEGORY_COLOR)).replace(/</g, '\\u003c')}).forEach(function(c){ activeCategories[c] = true; });
     // Learned once per session: sample the first SHAPE_SAMPLE_TARGET
     // classifications after a face is detected, lock to the most frequent
     // one, then stop re-classifying -- matches the ported design (a face
