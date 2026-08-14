@@ -1002,66 +1002,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
+// expo-notifications removed — free Apple accounts don't support aps-environment entitlement.
+// Expiry alerts are handled in-app via Alert.alert in the useEffect below.
 
 import { MUTED, PAGE_BG, PINK, PINK_SOFT, SERIF, TEXT } from '../../components/ProfileFields';
 
-// ── Notification setup ────────────────────────────────────────────────────────
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
-
-async function requestNotificationPermission(): Promise<boolean> {
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  if (existing === 'granted') return true;
-  const { status } = await Notifications.requestPermissionsAsync();
-  return status === 'granted';
-}
+// ── Notification stubs (expo-notifications removed for free Apple account compatibility) ──
 
 async function scheduleExpiryNotification(
-  productName: string,
-  daysUntil: number,
-  type: 'printed' | 'pao'
+  _productName: string,
+  _daysUntil: number,
+  _type: 'printed' | 'pao'
 ): Promise<string | null> {
-  try {
-    const granted = await requestNotificationPermission();
-    if (!granted) return null;
-
-    const seconds = daysUntil * 24 * 60 * 60;
-    if (seconds <= 0) return null;
-
-    const body =
-      type === 'printed'
-        ? `${productName} reaches its printed expiry date in ${daysUntil} days. Time to replace it.`
-        : `${productName} has been open for its recommended period. Consider replacing it.`;
-
-    const id = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: '💄 BeautyLens: Product expiring',
-        body,
-        data: { productName, type },
-        sound: true,
-      },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds },
-    });
-    return id;
-  } catch (e) {
-    console.error('[Notifications] Schedule error:', e);
-    return null;
-  }
+  return null;
 }
 
-async function cancelNotification(id: string) {
-  try {
-    await Notifications.cancelScheduledNotificationAsync(id);
-  } catch {}
+async function cancelNotification(_id: string) {
+  // no-op
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1595,11 +1552,8 @@ export default function CollectionScreen() {
     const paoMonths = DEFAULT_PAO[label.toLowerCase()] ?? 12;
     const paoLimitDays = paoMonths * 30;
 
-    // Schedule PAO notification
-    const paoNotifId = await scheduleExpiryNotification(displayName, paoLimitDays, 'pao');
     const updated = await updateProduct(id, {
       openedAt,
-      paoNotifId: paoNotifId ?? undefined,
     });
     setProducts(updated);
   };
@@ -1646,25 +1600,7 @@ export default function CollectionScreen() {
 
   const handleSaveEdit = async (p: Partial<SavedProduct>) => {
     if (!p.id) return;
-    // If expiry date changed, cancel old notification and schedule new one
     const existing = products.find((prod) => prod.id === p.id);
-    if (existing?.printedExpiryNotifId && p.expiryDate !== existing.expiryDate) {
-      await cancelNotification(existing.printedExpiryNotifId);
-    }
-    let printedExpiryNotifId = existing?.printedExpiryNotifId;
-    if (p.expiryDate && p.expiryDate !== existing?.expiryDate) {
-      const daysUntil = Math.floor(
-        (new Date(p.expiryDate).getTime() - Date.now()) / 86400000
-      );
-      if (daysUntil > 30) {
-        const notifId = await scheduleExpiryNotification(
-          p.displayName || existing?.displayName || '',
-          daysUntil - 30,
-          'printed'
-        );
-        printedExpiryNotifId = notifId ?? undefined;
-      }
-    }
     const updated = await updateProduct(p.id, {
       brand: p.brand,
       productName: p.productName,
@@ -1674,7 +1610,6 @@ export default function CollectionScreen() {
       expiryDate: p.expiryDate,
       rating: p.rating,
       notes: p.notes,
-      printedExpiryNotifId,
     });
     setProducts(updated);
     setEditTarget(null);
