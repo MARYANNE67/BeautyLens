@@ -20,6 +20,7 @@ import TutorialWebView, {
   type TutorialLabelItem,
   type PlacementCategory,
   type FaceShape,
+  type NoseShape,
 } from '../components/TutorialWebView';
 
 // Same mixed Ionicons/MaterialCommunityIcons approach as the AR try-on
@@ -48,6 +49,14 @@ const FACE_SHAPE_LABEL: Record<FaceShape, string> = {
   long: 'Long',
 };
 
+const NOSE_SHAPE_LABEL: Record<NoseShape, string> = {
+  balanced: 'balanced',
+  wide: 'wider',
+  slim: 'slim',
+  long: 'longer',
+  short: 'shorter',
+};
+
 const INITIAL_CATEGORIES: PlacementCategory[] = [];
 
 export default function TutorialScreen() {
@@ -61,6 +70,7 @@ export default function TutorialScreen() {
   const [sdkReady, setSdkReady] = useState(false);
   const [labels, setLabels] = useState<TutorialLabelItem[]>([]);
   const [faceShape, setFaceShape] = useState<FaceShape | null>(null);
+  const [noseShape, setNoseShape] = useState<NoseShape | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
@@ -162,7 +172,7 @@ export default function TutorialScreen() {
         initialCategories={INITIAL_CATEGORIES}
         onReady={() => setSdkReady(true)}
         onLabels={setLabels}
-        onShapeLocked={setFaceShape}
+        onShapeLocked={(shape, nose) => { setFaceShape(shape); setNoseShape(nose); }}
         onCaptured={handleCaptured}
         style={StyleSheet.absoluteFillObject}
       />
@@ -174,7 +184,12 @@ export default function TutorialScreen() {
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <Text style={styles.headerTitle}>Makeup Placement Tutorial</Text>
-            {faceShape && <Text style={styles.headerSubtitle}>{FACE_SHAPE_LABEL[faceShape]} face shape</Text>}
+            {faceShape && (
+              <Text style={styles.headerSubtitle}>
+                {FACE_SHAPE_LABEL[faceShape]} face
+                {noseShape ? ` · ${NOSE_SHAPE_LABEL[noseShape]} nose` : ''}
+              </Text>
+            )}
           </View>
           <View style={{ width: 38 }} />
         </View>

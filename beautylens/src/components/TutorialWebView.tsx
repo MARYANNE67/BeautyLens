@@ -32,6 +32,12 @@ import { WebView, WebViewMessageEvent } from 'react-native-webview';
 
 export type PlacementCategory = 'contour' | 'concealer' | 'highlighter' | 'blush' | 'bronzer';
 export type FaceShape = 'oval' | 'round' | 'square' | 'heart' | 'long';
+/** Nose contour is keyed to NOSE shape, not face shape -- every published
+ *  guide varies it by the nose's own proportions (wide noses get the side
+ *  lines drawn closer together, long noses get shadow under the tip, etc.).
+ *  Classified from landmark measurements; see classifyNoseShape in the
+ *  WebView script. 'balanced' is the no-pronounced-deviation default. */
+export type NoseShape = 'balanced' | 'wide' | 'slim' | 'long' | 'short';
 
 export const CATEGORY_COLOR: Record<PlacementCategory, string> = {
   contour: '#D98A4E',
@@ -54,7 +60,7 @@ export interface TutorialWebViewProps {
   initialCategories: PlacementCategory[];
   onReady?: () => void;
   onError?: (message: string) => void;
-  onShapeLocked?: (shape: FaceShape) => void;
+  onShapeLocked?: (shape: FaceShape, noseShape: NoseShape) => void;
   /** One entry per currently-active category whose placement rule has
    *  resolved (i.e. the face shape has locked in). Empty while nothing is
    *  active or the shape hasn't locked yet. */
@@ -139,6 +145,22 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
     var NOSE_BRIDGE_INDEX = 6;
     var LEFT_JAW_CORNER_INDEX = 58;
     var RIGHT_JAW_CORNER_INDEX = 288;
+    // Nose-measurement anchors. GLABELLA (9) is documented in faceGeometry.ts
+    // as the between-the-brows reference. The rest are commonly cited
+    // canonical midline/nose indices -- moderate confidence, same status as
+    // the other single-point anchors (not yet annotated on a real portrait
+    // in this codebase): 2 = columella base under the tip (subnasale proxy),
+    // 4 = midline just above the tip, 129/358 = outer alar/nose-wing points
+    // (the standard face-mesh proxy for nose width), 133/362 = inner eye
+    // corners. Left/right follows the same side convention as 61/291 and
+    // 50/280 (the lower index of each mirrored pair is the same side).
+    var GLABELLA_INDEX = 9;
+    var SUBNASALE_INDEX = 2;
+    var NOSE_LOWER_DORSUM_INDEX = 4;
+    var LEFT_NOSE_ALA_INDEX = 129;
+    var RIGHT_NOSE_ALA_INDEX = 358;
+    var LEFT_INNER_EYE_CORNER_INDEX = 133;
+    var RIGHT_INNER_EYE_CORNER_INDEX = 362;
     // From src/api/face_mesh.py's get_facial_regions() -- same indices the
     // backend detector already uses for these two named regions.
     var LEFT_UNDER_EYE_INDICES = [23,24,25,110,226,31,228,229,230,231,232,233];
@@ -159,22 +181,43 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
 
     // ── Placement rules table (ported from tutorialZones.ts's PLACEMENT_RULES) ──
     // See that file for the published-guide citations behind each zone.
+    //
+    // Forehead-contour zones for oval/round/square (heart and long already
+    // had theirs) are sourced from face-shape-specific guides:
+    //  - charlottetilbury.com/us/secrets/how-to-contour-every-face-shape
+    //    (oval: "place your product on either side of the forehead for a
+    //    shading effect that helps it to look smaller and shorter"; square:
+    //    diagonal strokes on the four corners of the face incl. temples)
+    //  - treasurehouseofmakeup.co.uk/blog/how-to-contour-face/ (round:
+    //    "contouring around the forehead and temples can elongate the face";
+    //    square: "contour around the sides of the forehead and temples to
+    //    soften the face's edges")
+    // Round reuses heart's temple->forehead-side band shape: the sourced
+    // techniques genuinely describe the same placement (same situation as
+    // blush's round/long note in tutorialZones.ts), differing only in stated
+    // goal (elongate vs narrow).
     var PLACEMENT_RULES = {
       contour: {
-        oval: { label: 'Light contour along the cheek hollows', zones: [
+        oval: { label: 'Light contour along the cheek hollows + sides of the forehead', zones: [
           { key:'contour-left-hollow', kind:'band', opacity:0.4, strokeWidth:8, source:{ sequence:[LEFT_HOLLOW, { interpolate:{ a:LEFT_CHEEK_HOLLOW_INDEX, b:LEFT_MOUTH_CORNER_INDEX, t:0.55 } }] } },
-          { key:'contour-right-hollow', kind:'band', opacity:0.4, strokeWidth:8, source:{ sequence:[RIGHT_HOLLOW, { interpolate:{ a:RIGHT_CHEEK_HOLLOW_INDEX, b:RIGHT_MOUTH_CORNER_INDEX, t:0.55 } }] } }
+          { key:'contour-right-hollow', kind:'band', opacity:0.4, strokeWidth:8, source:{ sequence:[RIGHT_HOLLOW, { interpolate:{ a:RIGHT_CHEEK_HOLLOW_INDEX, b:RIGHT_MOUTH_CORNER_INDEX, t:0.55 } }] } },
+          { key:'contour-left-forehead-side', kind:'band', opacity:0.35, strokeWidth:8, source:{ hairlineOr:{ keys:['left'], fallback:{ newRegion:'left_forehead_side' } } } },
+          { key:'contour-right-forehead-side', kind:'band', opacity:0.35, strokeWidth:8, source:{ hairlineOr:{ keys:['right'], fallback:{ newRegion:'right_forehead_side' } } } }
         ] },
-        round: { label: 'Contour jaw + cheek hollows to add definition', zones: [
+        round: { label: 'Contour jaw + cheek hollows, temples up toward the forehead to elongate', zones: [
           { key:'contour-jawline', kind:'band', opacity:0.5, strokeWidth:8, source:{ newRegion:'jawline' } },
           { key:'contour-left-hollow', kind:'band', opacity:0.55, strokeWidth:10, source:{ sequence:[LEFT_HOLLOW, { interpolate:{ a:LEFT_CHEEK_HOLLOW_INDEX, b:LEFT_MOUTH_CORNER_INDEX, t:0.55 } }] } },
-          { key:'contour-right-hollow', kind:'band', opacity:0.55, strokeWidth:10, source:{ sequence:[RIGHT_HOLLOW, { interpolate:{ a:RIGHT_CHEEK_HOLLOW_INDEX, b:RIGHT_MOUTH_CORNER_INDEX, t:0.55 } }] } }
+          { key:'contour-right-hollow', kind:'band', opacity:0.55, strokeWidth:10, source:{ sequence:[RIGHT_HOLLOW, { interpolate:{ a:RIGHT_CHEEK_HOLLOW_INDEX, b:RIGHT_MOUTH_CORNER_INDEX, t:0.55 } }] } },
+          { key:'contour-left-forehead-side', kind:'band', opacity:0.4, strokeWidth:8, source:{ sequence:[{ indices:[LEFT_TEMPLE_INDEX] }, { hairlineOr:{ keys:['left'], fallback:{ newRegion:'left_forehead_side' } } }] } },
+          { key:'contour-right-forehead-side', kind:'band', opacity:0.4, strokeWidth:8, source:{ sequence:[{ indices:[RIGHT_TEMPLE_INDEX] }, { hairlineOr:{ keys:['right'], fallback:{ newRegion:'right_forehead_side' } } }] } }
         ] },
-        square: { label: 'Soften jaw corners + temples, light diagonal strokes only', zones: [
+        square: { label: 'Soften jaw corners, temples + forehead corners, light diagonal strokes only', zones: [
           { key:'contour-left-hollow', kind:'band', opacity:0.4, strokeWidth:8, source:{ sequence:[LEFT_HOLLOW, { interpolate:{ a:LEFT_CHEEK_HOLLOW_INDEX, b:LEFT_MOUTH_CORNER_INDEX, t:0.55 } }] } },
           { key:'contour-right-hollow', kind:'band', opacity:0.4, strokeWidth:8, source:{ sequence:[RIGHT_HOLLOW, { interpolate:{ a:RIGHT_CHEEK_HOLLOW_INDEX, b:RIGHT_MOUTH_CORNER_INDEX, t:0.55 } }] } },
           { key:'contour-left-temple', kind:'band', opacity:0.3, strokeWidth:6, source:{ sequence:[{ indices:[LEFT_TEMPLE_INDEX] }, { indices:[LEFT_JAW_CORNER_INDEX] }] } },
-          { key:'contour-right-temple', kind:'band', opacity:0.3, strokeWidth:6, source:{ sequence:[{ indices:[RIGHT_TEMPLE_INDEX] }, { indices:[RIGHT_JAW_CORNER_INDEX] }] } }
+          { key:'contour-right-temple', kind:'band', opacity:0.3, strokeWidth:6, source:{ sequence:[{ indices:[RIGHT_TEMPLE_INDEX] }, { indices:[RIGHT_JAW_CORNER_INDEX] }] } },
+          { key:'contour-left-forehead-corner', kind:'band', opacity:0.3, strokeWidth:6, source:{ hairlineOr:{ keys:['left'], fallback:{ newRegion:'left_forehead_side' } } } },
+          { key:'contour-right-forehead-corner', kind:'band', opacity:0.3, strokeWidth:6, source:{ hairlineOr:{ keys:['right'], fallback:{ newRegion:'right_forehead_side' } } } }
         ] },
         heart: { label: 'Contour temples/forehead sides to narrow', zones: [
           { key:'contour-left-forehead-side', kind:'band', opacity:0.5, strokeWidth:8, source:{ sequence:[{ indices:[LEFT_TEMPLE_INDEX] }, { hairlineOr:{ keys:['left'], fallback:{ newRegion:'left_forehead_side' } } }] } },
@@ -295,6 +338,71 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
       }
     };
 
+    // ── Nose-contour rules, keyed by NOSE shape (see classifyNoseShape) ───
+    // Drawn in addition to the face-shape contour zones whenever the contour
+    // category is active. Base technique from
+    // charlottetilbury.com/us/secrets/how-to-contour-nose: thin vertical
+    // lines down the sides of the bridge ("the closer the lines, the smaller
+    // the nose"), shadow under the tip to shorten a long nose. Side lines
+    // are built from interpolations between already-trusted anchors -- top
+    // point partway from the bridge midline (6) toward the same-side inner
+    // eye corner, bottom point partway from the midline above the tip (4)
+    // toward the same-side ala -- so line spacing is a single t knob per
+    // nose shape, directly implementing the "closer together for a wider
+    // nose" instruction. The slim rule intentionally has NO zones: a nose
+    // with no width to take away shouldn't be told to slim itself further.
+    function noseSideLines(tTop, tBottom, opacity){
+      return [
+        { key:'contour-nose-left-line', kind:'band', opacity:opacity, strokeWidth:3, source:{ sequence:[
+          { interpolate:{ a:NOSE_BRIDGE_INDEX, b:LEFT_INNER_EYE_CORNER_INDEX, t:tTop } },
+          { interpolate:{ a:NOSE_LOWER_DORSUM_INDEX, b:LEFT_NOSE_ALA_INDEX, t:tBottom } }
+        ] } },
+        { key:'contour-nose-right-line', kind:'band', opacity:opacity, strokeWidth:3, source:{ sequence:[
+          { interpolate:{ a:NOSE_BRIDGE_INDEX, b:RIGHT_INNER_EYE_CORNER_INDEX, t:tTop } },
+          { interpolate:{ a:NOSE_LOWER_DORSUM_INDEX, b:RIGHT_NOSE_ALA_INDEX, t:tBottom } }
+        ] } }
+      ];
+    }
+    var NOSE_CONTOUR_RULES = {
+      balanced: {
+        label: 'Nose: thin lines down both sides of the bridge.',
+        zones: noseSideLines(0.45, 0.5, 0.45)
+      },
+      wide: {
+        label: 'Nose (wider): side lines drawn closer together, light shading on the nostril wings.',
+        zones: noseSideLines(0.3, 0.35, 0.45).concat([
+          { key:'contour-nose-left-ala', kind:'marker', opacity:0.3, radius:4, source:{ indices:[LEFT_NOSE_ALA_INDEX] } },
+          { key:'contour-nose-right-ala', kind:'marker', opacity:0.3, radius:4, source:{ indices:[RIGHT_NOSE_ALA_INDEX] } }
+        ])
+      },
+      slim: {
+        label: 'Nose already slim: skip nose contour.',
+        zones: []
+      },
+      long: {
+        label: 'Nose (longer): side lines plus a soft shadow under the tip to shorten.',
+        zones: noseSideLines(0.45, 0.5, 0.45).concat([
+          { key:'contour-nose-under-tip', kind:'band', opacity:0.45, strokeWidth:3, source:{ sequence:[
+            { interpolate:{ a:SUBNASALE_INDEX, b:LEFT_NOSE_ALA_INDEX, t:0.3 } },
+            { interpolate:{ a:SUBNASALE_INDEX, b:RIGHT_NOSE_ALA_INDEX, t:0.3 } }
+          ] } }
+        ])
+      },
+      short: {
+        label: 'Nose (shorter): side lines started up near the brows to lengthen.',
+        zones: [
+          { key:'contour-nose-left-line', kind:'band', opacity:0.45, strokeWidth:3, source:{ sequence:[
+            { interpolate:{ a:GLABELLA_INDEX, b:LEFT_INNER_EYE_CORNER_INDEX, t:0.4 } },
+            { interpolate:{ a:NOSE_LOWER_DORSUM_INDEX, b:LEFT_NOSE_ALA_INDEX, t:0.5 } }
+          ] } },
+          { key:'contour-nose-right-line', kind:'band', opacity:0.45, strokeWidth:3, source:{ sequence:[
+            { interpolate:{ a:GLABELLA_INDEX, b:RIGHT_INNER_EYE_CORNER_INDEX, t:0.4 } },
+            { interpolate:{ a:NOSE_LOWER_DORSUM_INDEX, b:RIGHT_NOSE_ALA_INDEX, t:0.5 } }
+          ] } }
+        ]
+      }
+    };
+
     // ── Helpers (same conventions as ARMakeupWebView.tsx) ──────────────────
     function pts(lms, indices, W, H){
       return indices.map(function(i){ return [lms[i].x*W, lms[i].y*H]; });
@@ -360,6 +468,43 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
       if(r.jawToCheekRatio >= 0.92 && r.foreheadToCheekRatio >= 0.92 && r.lengthToWidthRatio < 1.25) return 'square';
       if(r.lengthToWidthRatio <= 1.25 && r.jawToCheekRatio >= 0.9) return 'round';
       return 'oval';
+    }
+
+    // ── Nose-shape classification ────────────────────────────────────────
+    // Nose contour is keyed to the nose's own proportions, not face shape
+    // (every published guide varies it this way -- e.g.
+    // charlottetilbury.com/us/secrets/how-to-contour-nose: wide noses get
+    // the side lines drawn closer together, long noses get shadow under the
+    // tip). Two established anthropometric references ground the ratios:
+    //  - Nasal index (alar width / nose height): population-classification
+    //    cutoffs are leptorrhine <0.70 and platyrrhine >0.85. Those describe
+    //    populations, not cosmetics, so guidance only changes for PRONOUNCED
+    //    deviations -- thresholds sit outside those cutoffs (>=0.92 wide,
+    //    <=0.60 slim), leaving a generous 'balanced' middle.
+    //  - Neoclassical facial-thirds canon (glabella->subnasale should about
+    //    equal subnasale->menton): ratio >=1.15 reads long, <=0.82 short.
+    // Frontal 2D projection is fine for both: every distance involved lies
+    // in the frontal plane. What is NOT classifiable from a front view:
+    // dorsal bumps, crookedness, tip shape (all depth/profile features) --
+    // those variants from the guides are deliberately not modeled.
+    // Ordered checks like classifyFaceShape: a nose can be e.g. both wide
+    // and long; the first match wins.
+    function classifyNoseShape(lms, W, H){
+      function P(i){ return pts(lms,[i],W,H)[0]; }
+      var alaL = P(LEFT_NOSE_ALA_INDEX), alaR = P(RIGHT_NOSE_ALA_INDEX);
+      var glabella = P(GLABELLA_INDEX), subnasale = P(SUBNASALE_INDEX), chin = P(FACE_BOTTOM_INDEX);
+      if(!alaL || !alaR || !glabella || !subnasale || !chin) return null;
+      var alarWidth  = dist2(alaL, alaR);
+      var noseHeight = dist2(glabella, subnasale);
+      var lowerThird = dist2(subnasale, chin);
+      if(noseHeight === 0 || lowerThird === 0) return null;
+      var nasalIndex  = alarWidth / noseHeight;
+      var lengthRatio = noseHeight / lowerThird;
+      if(nasalIndex >= 0.92) return 'wide';
+      if(nasalIndex <= 0.60) return 'slim';
+      if(lengthRatio >= 1.15) return 'long';
+      if(lengthRatio <= 0.82) return 'short';
+      return 'balanced';
     }
 
     // ── Zone resolution + drawing ────────────────────────────────────────
@@ -472,13 +617,26 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
     // mid-session).
     var SHAPE_SAMPLE_TARGET = 20;
     var shapeSamples = [];
+    var noseSamples = [];
     var lockedShape = null;
+    var lockedNoseShape = null;
     var lastLabelsKey = null;
+
+    function modeOf(samples){
+      var counts = {};
+      samples.forEach(function(x){ counts[x]=(counts[x]||0)+1; });
+      var best=null, bestCount=0;
+      Object.keys(counts).forEach(function(k){ if(counts[k]>bestCount){best=k;bestCount=counts[k];} });
+      return best;
+    }
 
     function ruleFor(category){
       if(!lockedShape) return null;
       var byShape = PLACEMENT_RULES[category];
       return byShape ? byShape[lockedShape] : null;
+    }
+    function noseRule(){
+      return lockedNoseShape ? NOSE_CONTOUR_RULES[lockedNoseShape] : null;
     }
     // Nothing is sent until the shape locks in -- RN shows its own "learning
     // your face shape" message from the shapeLocked callback until then, so
@@ -489,7 +647,13 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
       Object.keys(activeCategories).forEach(function(cat){
         if(!activeCategories[cat]) return;
         var rule = ruleFor(cat);
-        if(rule) items.push({ category:cat, label:rule.label });
+        if(!rule) return;
+        var text = rule.label;
+        if(cat === 'contour'){
+          var nr = noseRule();
+          if(nr && nr.label) text += ' ' + nr.label;
+        }
+        items.push({ category:cat, label:text });
       });
       var key = JSON.stringify(items);
       if(key !== lastLabelsKey){
@@ -532,14 +696,13 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
           if(!lockedShape){
             var s = classifyFaceShape(lms, W, H);
             if(s) shapeSamples.push(s);
+            var n = classifyNoseShape(lms, W, H);
+            if(n) noseSamples.push(n);
             if(shapeSamples.length >= SHAPE_SAMPLE_TARGET){
-              var counts = {};
-              shapeSamples.forEach(function(x){ counts[x]=(counts[x]||0)+1; });
-              var best=null, bestCount=0;
-              Object.keys(counts).forEach(function(k){ if(counts[k]>bestCount){best=k;bestCount=counts[k];} });
-              lockedShape = best;
+              lockedShape = modeOf(shapeSamples);
+              lockedNoseShape = modeOf(noseSamples) || 'balanced';
               setPill('Guide is live',true);
-              rnPost({type:'shapeLocked', shape:lockedShape});
+              rnPost({type:'shapeLocked', shape:lockedShape, noseShape:lockedNoseShape});
             }
           }
 
@@ -548,6 +711,12 @@ function buildTutorialHtml(initialCategories: PlacementCategory[]): string {
               if(!activeCategories[cat]) return;
               var rule = ruleFor(cat);
               if(rule) drawZones(ctx, lms, W, H, rule, cat);
+              // Nose contour rides along with the contour category, keyed to
+              // the classified nose shape rather than the face shape.
+              if(cat === 'contour'){
+                var nr = noseRule();
+                if(nr && nr.zones.length) drawZones(ctx, lms, W, H, nr, cat);
+              }
             });
           }
           maybeSendLabels();
@@ -625,7 +794,7 @@ const TutorialWebView = forwardRef<TutorialWebViewRef, TutorialWebViewProps>(
         switch (msg.type) {
           case 'ready':        onReady?.();                                     break;
           case 'error':        onError?.(msg.message as string);                break;
-          case 'shapeLocked':  onShapeLocked?.(msg.shape as FaceShape);          break;
+          case 'shapeLocked':  onShapeLocked?.(msg.shape as FaceShape, msg.noseShape as NoseShape); break;
           case 'labels':       onLabels?.(msg.items as TutorialLabelItem[]);    break;
           case 'captured':     onCaptured?.(msg.data as string);                break;
           default: break;
