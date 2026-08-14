@@ -162,7 +162,7 @@ export default function TutorialScreen() {
         initialCategories={INITIAL_CATEGORIES}
         onReady={() => setSdkReady(true)}
         onLabels={setLabels}
-        onShapeLocked={setFaceShape}
+        onShapeLocked={(shape) => setFaceShape(shape)}
         onCaptured={handleCaptured}
         style={StyleSheet.absoluteFillObject}
       />
