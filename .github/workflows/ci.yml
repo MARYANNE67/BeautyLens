@@ -105,8 +105,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # --passWithNoTests was dropped once a real Jest suite existed: with it,
+      # a jest config typo that collects zero tests would pass green while
+      # testing nothing. "No tests found" should be a loud failure now.
       - name: Test
-        run: npx jest --passWithNoTests
+        run: npx jest
 
       - name: Expo export
         run: npx expo export --platform web 2>&1 | grep -v "^warn"
