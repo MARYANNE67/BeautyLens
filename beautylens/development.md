@@ -184,6 +184,14 @@ npx expo prebuild --clean -p ios
 cd ios && pod install
 ```
 
+**Free-Apple-account bundle IDs:** Apple permanently ties a bundle
+identifier to the first (personal) team that registers it. The committed
+`ios.bundleIdentifier` may therefore be claimed by a teammate already -- if
+Xcode shows "Failed Registering Bundle Identifier", change
+`ios.bundleIdentifier` in `app.json` to something unique to you (e.g.
+`com.YOURNAME.beautylens`), regenerate `ios/`, and do NOT commit that change
+(it would break the teammate who owns the committed id).
+
 Then open **`ios/beautylens.xcworkspace`** in Xcode — not `.xcodeproj`.
 CocoaPods dependencies only link through the workspace; opening the project
 file directly is the other common source of the same class of error.
