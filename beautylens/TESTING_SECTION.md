@@ -4,7 +4,7 @@
 
 BeautyLens was tested across four levels following the course framework: unit, integration, system, and acceptance testing. Both functional and non-functional aspects of the application were evaluated. All test artefacts are located in the `tests/` directory of the repository.
 
-The automated test suite covers eight Python modules spanning the full backend pipeline: API endpoints, product class normalisation, foundation shade matching, product recognition via OCR, capture quality assessment, skin depth estimation, undertone estimation, and AR try-on rendering. All 200 tests pass on a clean checkout with a single command (`pytest tests/ -v`).
+The automated test suite covers eight Python modules spanning the full backend pipeline: API endpoints, product class normalisation, foundation shade matching, product recognition via OCR, capture quality assessment, skin depth estimation, undertone estimation, and AR try-on rendering. All 231 tests pass on a clean checkout with a single command (`pytest tests/ -v`).
 
 ---
 
@@ -351,4 +351,5 @@ pytest tests/ --cov=src/api --cov-report=term-missing
 | `test_skin_depth.py` | Skin depth estimation | 36 | 36 | 0 |
 | `test_tryon_render.py` | AR mask & LAB blending | 8 | 8 | 0 |
 | `test_undertone.py` | Undertone classification | 12 | 12 | 0 |
-| **Total** | | **200** | **200** | **0** |
+| `test_integration.py` | Detection pipeline on real photos | 31 | 31 | 0 |
+| **Total** | | **231** | **231** | **0** |
