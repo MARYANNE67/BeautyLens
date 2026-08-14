@@ -837,7 +837,14 @@ const ARMakeupWebView = forwardRef<ARMakeupWebViewRef, ARMakeupWebViewProps>(
         <WebView
           ref={webViewRef}
           style={styles.webview}
-          originWhitelist={['*']}
+          // Only our own generated HTML (origin = the cdn.jsdelivr.net
+          // baseUrl) may load here, and navigation away is refused outright:
+          // this WebView holds a live camera stream, so it must never be
+          // steerable to an arbitrary URL.
+          originWhitelist={['https://cdn.jsdelivr.net', 'about:*']}
+          onShouldStartLoadWithRequest={(req) =>
+            req.url.startsWith('https://cdn.jsdelivr.net') || req.url.startsWith('about:')
+          }
           source={{ html, baseUrl: 'https://cdn.jsdelivr.net' }}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
