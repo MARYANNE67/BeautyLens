@@ -273,3 +273,46 @@ class TestDetectWithImage:
         )
         img_str = r.json()["annotated_image"]
         assert img_str.startswith("data:image/jpeg;base64,")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# DETECT-PRODUCT-BRAND (OCR endpoint contract)
+# ════════════════════════════════════════════════════════════════════════════
+
+class TestDetectProductBrand:
+    """Pins the endpoint <-> parser contract: extract_text_from_image_region
+    returns a (text, logo) TUPLE or None. The endpoint once passed the whole
+    tuple into parse_product_from_text as if it were the text string, which
+    crashed with AttributeError the moment a real Vision API key existed --
+    and silently no-op'd without one, so no test caught it."""
+
+    def _post(self, client, monkeypatch, ocr_return):
+        import src.api.main as main
+
+        async def fake_ocr(*args, **kwargs):
+            return ocr_return
+
+        monkeypatch.setattr(main, "extract_text_from_image_region", fake_ocr)
+        return client.post(
+            "/detect-product-brand"
+            "?x1=0&y1=0&x2=100&y2=100&product_class=lipstick"
+            "&image_width=100&image_height=100",
+            files={"image": ("p.jpg", make_test_image(100, 100), "image/jpeg")},
+        )
+
+    def test_tuple_result_is_unpacked_and_parsed(self, client, monkeypatch):
+        r = self._post(client, monkeypatch, ("MAYBELLINE\nSUPERSTAY MATTE", None))
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ocr_text"] == "MAYBELLINE\nSUPERSTAY MATTE"
+        assert body.get("brand", "").lower() == "maybelline"
+
+    def test_logo_channel_feeds_brand_detection(self, client, monkeypatch):
+        r = self._post(client, monkeypatch, ("illegible text", "Maybelline"))
+        assert r.status_code == 200
+        assert r.json().get("brand", "").lower() == "maybelline"
+
+    def test_none_result_degrades_gracefully(self, client, monkeypatch):
+        r = self._post(client, monkeypatch, None)
+        assert r.status_code == 200
+        assert r.json()["status"] == "success"

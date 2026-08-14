@@ -314,11 +314,15 @@ async def detect_product_brand(
 
     bbox = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
 
-    raw_text = await extract_text_from_image_region(
+    # Returns (full_text, detected_logo) on success, None when OCR is
+    # unavailable or found nothing. The logo channel feeds brand detection
+    # for stylised packaging fonts that text OCR misreads.
+    ocr_result = await extract_text_from_image_region(
         contents, bbox, image_width, image_height
     )
+    raw_text, detected_logo = ocr_result if ocr_result else ("", None)
 
-    product_info = parse_product_from_text(raw_text or "", product_class)
+    product_info = parse_product_from_text(raw_text or "", product_class, detected_logo)
 
     return {
         "status": "success",
