@@ -351,13 +351,14 @@ function buildARHtml(layers: MakeupLayer[]): string {
         var lidH     = eyeW * 0.48;
         var lashMidY = lashPts.reduce(function(s,p){ return s+p[1]; }, 0) / lashPts.length;
         var lashTopY = lashPts.reduce(function(m,p){ return p[1]<m[1]?p:m; })[1];
+        var cx       = (inner[0]+outer[0])/2;
 
-        // Build lid path at a given vertical fraction (1.0 = full lidH)
+        // Lid polygon path — used only for lash-line clip (keeps edge tight against lashes)
         function lidPath(fraction){
           var frac   = (fraction === undefined) ? 1 : fraction;
           var h      = lidH * frac;
           var scaledOuterTop = [outer[0]+eyeW*0.06,   outer[1]-h*0.82];
-          var scaledCentTop  = [(inner[0]+outer[0])/2, lashTopY - h];
+          var scaledCentTop  = [cx, lashTopY - h];
           var scaledInnerTop = [inner[0],              inner[1]-h*0.55];
           ctx.beginPath();
           ctx.moveTo(inner[0], inner[1]);
@@ -372,104 +373,71 @@ function buildARHtml(layers: MakeupLayer[]): string {
           ctx.closePath();
         }
 
-        // Zone 1 — Deep lash line (darkest, 40% of lidH)
+        // Pass 1 — Lash-line band: clipped for a clean lower edge, fades upward
         ctx.save();
-        lidPath(0.4);
+        lidPath(0.35);
         ctx.clip();
-        var grad1 = ctx.createLinearGradient(0, lashMidY, 0, lashMidY - lidH*0.4);
-        grad1.addColorStop(0, 'rgba('+Math.round(r*0.6)+','+Math.round(g*0.6)+','+Math.round(b*0.6)+',1)');
-        grad1.addColorStop(1, 'rgba('+Math.round(r*0.6)+','+Math.round(g*0.6)+','+Math.round(b*0.6)+',0)');
+        var g1 = ctx.createLinearGradient(0, lashMidY, 0, lashMidY - lidH*0.35);
+        g1.addColorStop(0, 'rgba('+Math.round(r*0.55)+','+Math.round(g*0.55)+','+Math.round(b*0.55)+',0.9)');
+        g1.addColorStop(1, 'rgba('+Math.round(r*0.55)+','+Math.round(g*0.55)+','+Math.round(b*0.55)+',0)');
         ctx.globalCompositeOperation = 'multiply';
-        ctx.globalAlpha = 0.7;
-        ctx.fillStyle = grad1;
-        lidPath(0.4);
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = g1;
+        lidPath(0.35);
         ctx.fill();
         ctx.restore();
 
-        // Zone 2 — Mid lid (main colour, full height)
-        ctx.save();
-        lidPath(1.0);
-        ctx.clip();
-        var grad2 = ctx.createLinearGradient(0, lashMidY + lidH*0.3, 0, lashMidY - lidH);
-        grad2.addColorStop(0, 'rgba('+r+','+g+','+b+',1)');
-        grad2.addColorStop(1, 'rgba('+r+','+g+','+b+',0)');
-        ctx.globalCompositeOperation = 'multiply';
-        ctx.globalAlpha = 0.5;
-        ctx.fillStyle = grad2;
-        lidPath(1.0);
-        ctx.fill();
-        ctx.restore();
-
-        // Zone 3 — Crease definition narrow ellipse at ~65% of lidH
-        var creaseX = (inner[0]+outer[0])/2;
-        var creaseY = lashMidY - lidH*0.65;
+        // Pass 2 — Main lid colour: radial gradient, clipped above lash line only
         ctx.save();
         ctx.beginPath();
-        ctx.ellipse(creaseX, creaseY, eyeW*0.4, lidH*0.22, 0, 0, Math.PI*2);
+        ctx.rect(cx - eyeW, 0, eyeW*2, lashMidY); // hard ceiling at lash line — no bleed onto eyeball
+        ctx.clip();
+        var focusY = lashMidY - lidH * 0.28;
+        var rg = ctx.createRadialGradient(cx, focusY, 0, cx, focusY, eyeW * 0.6);
+        rg.addColorStop(0,    'rgba('+r+','+g+','+b+',0.55)');
+        rg.addColorStop(0.5,  'rgba('+r+','+g+','+b+',0.25)');
+        rg.addColorStop(1,    'rgba('+r+','+g+','+b+',0)');
         ctx.globalCompositeOperation = 'multiply';
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = 'rgb('+Math.round(r*0.5)+','+Math.round(g*0.5)+','+Math.round(b*0.5)+')';
-        ctx.fill();
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = rg;
+        ctx.fillRect(cx - eyeW*0.75, lashMidY - lidH*1.5, eyeW*1.5, lidH*1.5);
         ctx.restore();
 
-        // Zone 4 — Brow bone highlight (subtle brightening above crease)
-        var browX = (inner[0]+outer[0])/2;
-        var browY = lashMidY - lidH*1.1;
-        var browRad = lidH*0.3;
+        // Pass 3 — Diffuse outer halo: clipped above lash line, soft upper fade
         ctx.save();
-        var browGrad = ctx.createRadialGradient(browX, browY, 0, browX, browY, browRad);
-        browGrad.addColorStop(0, 'rgba(255,255,255,1)');
-        browGrad.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.globalCompositeOperation = 'screen';
-        ctx.globalAlpha = 0.12;
-        ctx.fillStyle = browGrad;
         ctx.beginPath();
-        ctx.arc(browX, browY, browRad, 0, Math.PI*2);
-        ctx.fill();
+        ctx.rect(cx - eyeW, 0, eyeW*2, lashMidY);
+        ctx.clip();
+        var haloY = lashMidY - lidH * 0.55;
+        var hg = ctx.createRadialGradient(cx, haloY, 0, cx, haloY, eyeW * 0.7);
+        hg.addColorStop(0,  'rgba('+Math.round(r*0.8)+','+Math.round(g*0.8)+','+Math.round(b*0.8)+',0.18)');
+        hg.addColorStop(1,  'rgba('+Math.round(r*0.8)+','+Math.round(g*0.8)+','+Math.round(b*0.8)+',0)');
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.globalAlpha = 1.0;
+        ctx.fillStyle = hg;
+        ctx.fillRect(cx - eyeW, lashMidY - lidH*2, eyeW*2, lidH*2);
         ctx.restore();
 
-        // Zone 5 — Shimmer / glitter
+        // Shimmer: soft central glow (no dots). Screen-blended white reads
+        // far stronger on this WebView than the alpha suggests (same lesson
+        // as the lipstick gloss passes) -- keep it low, and tint it toward
+        // the shadow colour instead of pure white so the sheen reads as
+        // shimmer in the product's own colour, not a white spot.
         if(finish === 'shimmer' || finish === 'glitter'){
-          // Radial shimmer glow
+          var sr2 = Math.round(r + (255-r)*0.6);
+          var sg2 = Math.round(g + (255-g)*0.6);
+          var sb2 = Math.round(b + (255-b)*0.6);
           ctx.save();
           lidPath(1.0);
           ctx.clip();
           ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = 0.32;
-          var cx2 = (inner[0]+outer[0])/2;
-          var sg = ctx.createRadialGradient(cx2, lashMidY-lidH*0.25, 1, cx2, lashMidY-lidH*0.25, lidH*0.65);
-          sg.addColorStop(0, 'rgba(255,255,255,0.9)');
-          sg.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.globalAlpha = 0.1;
+          var sg = ctx.createRadialGradient(cx, lashMidY-lidH*0.25, 1, cx, lashMidY-lidH*0.25, lidH*0.6);
+          sg.addColorStop(0, 'rgba('+sr2+','+sg2+','+sb2+',0.85)');
+          sg.addColorStop(1, 'rgba('+sr2+','+sg2+','+sb2+',0)');
           ctx.fillStyle = sg;
           lidPath(1.0);
           ctx.fill();
-          ctx.restore();
-
-          // 8 deterministic shimmer dots at predictable grid positions
-          var bbMinX = Math.min(inner[0], outer[0]);
-          var bbMaxX = Math.max(inner[0], outer[0]);
-          var bbMinY = lashMidY - lidH;
-          var bbW2   = bbMaxX - bbMinX;
-          var bbH2   = lidH;
-          // Grid: xFracs [0.25, 0.5, 0.75] x yFracs [0.3, 0.6] = 6 dots
-          // + extras [0.1, 0.4] and [0.9, 0.4] = 8 dots total
-          var dotFracs = [
-            [0.25,0.3],[0.25,0.6],
-            [0.5, 0.3],[0.5, 0.6],
-            [0.75,0.3],[0.75,0.6],
-            [0.1, 0.4],[0.9, 0.4]
-          ];
-          ctx.save();
-          ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = 0.7;
-          ctx.fillStyle = 'rgba(255,255,255,0.9)';
-          for(var di=0; di<dotFracs.length; di++){
-            var dx = bbMinX + dotFracs[di][0]*bbW2;
-            var dy = bbMinY + dotFracs[di][1]*bbH2;
-            ctx.beginPath();
-            ctx.arc(dx, dy, 1.5, 0, Math.PI*2);
-            ctx.fill();
-          }
           ctx.restore();
         }
       }
