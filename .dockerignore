@@ -1,7 +1,8 @@
-# Keep the build context small and free of local-only state. Note the model
-# weights and shade catalog are ALSO excluded: production images fetch both
-# from the Hugging Face artifact repo at startup (deploy/fetch_artifacts.py),
-# so local and Space builds behave identically.
+# Keep the build context small and free of local-only state. The model
+# weights and shade catalog are deliberately INCLUDED: baking them into the
+# image keeps cold starts off the network entirely (anonymous HF downloads
+# from cloud IPs are rate-limited and blew Cloud Run's startup deadline).
+# deploy/fetch_artifacts.py remains the fallback when they're absent.
 **/node_modules
 **/.venv
 **/venv
@@ -13,8 +14,6 @@
 beautylens/beautylens.db
 beautylens/.coverage
 beautylens/.env
-beautylens/models
 beautylens/data/sources
-beautylens/data/shade_catalog_seed.json
 beautylens/tests/fixtures
 docs

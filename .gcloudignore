@@ -1,6 +1,6 @@
 # Upload context for `gcloud run deploy --source .` -- mirror of .dockerignore.
-# Model weights and the shade catalog are fetched at container start from the
-# HF artifact repo, so they stay out of the upload too.
+# The model weights and shade catalog are INCLUDED so they get baked into the
+# image (see .dockerignore for why).
 .git
 **/node_modules
 **/.venv
@@ -12,8 +12,6 @@
 beautylens/beautylens.db
 beautylens/.coverage
 beautylens/.env
-beautylens/models
 beautylens/data/sources
-beautylens/data/shade_catalog_seed.json
 beautylens/tests/fixtures
 docs
