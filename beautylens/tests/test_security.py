@@ -180,3 +180,28 @@ class TestRateLimiting:
 
         for _ in range(5):
             assert client.get("/free").status_code == 200
+
+
+# ── Admin endpoint gating ────────────────────────────────────────────────────
+# /load-model and /set-confidence are dev tools no app screen calls, yet they
+# mutate global state for every user. The conftest enables them for the rest
+# of the suite; these tests assert the default (disabled) behaviour: 404, not
+# 403, so their existence isn't advertised.
+
+class TestAdminEndpointGating:
+    def test_load_model_is_404_when_disabled(self, client, monkeypatch):
+        monkeypatch.setenv("ADMIN_ENDPOINTS_ENABLED", "0")
+        r = client.post("/load-model", json={"model_file": "best.pt"})
+        assert r.status_code == 404
+        assert r.json()["detail"] == "Not Found"
+
+    def test_set_confidence_is_404_when_disabled(self, client, monkeypatch):
+        monkeypatch.setenv("ADMIN_ENDPOINTS_ENABLED", "0")
+        r = client.post("/set-confidence", json={"threshold": 0.5})
+        assert r.status_code == 404
+        assert r.json()["detail"] == "Not Found"
+
+    def test_set_confidence_works_when_enabled(self, client):
+        # conftest sets ADMIN_ENDPOINTS_ENABLED=1 for the suite
+        r = client.post("/set-confidence", json={"threshold": 0.5})
+        assert r.status_code == 200

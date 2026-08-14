@@ -45,7 +45,8 @@ async def extract_text_from_image_region(
     Returns raw extracted text or None if OCR fails/finds nothing.
     """
     api_key = os.getenv("GOOGLE_VISION_API_KEY")
-    print(f"[OCR] API key loaded: {bool(api_key)}, length: {len(api_key) if api_key else 0}")
+    # Log only presence -- no other metadata about the secret.
+    print(f"[OCR] API key loaded: {bool(api_key)}")
     if not api_key:
         return None
 

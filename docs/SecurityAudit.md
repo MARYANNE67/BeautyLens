@@ -20,6 +20,7 @@ The application was audited against the course's secure-development checklist: i
 | 6 | Low | `protobuf 3.20.3` has 2 known CVEs | Accepted (pinned) |
 | 7 | Info | Unowned pre-auth profiles claimable by id | Accepted (by design) |
 | 8 | Medium | Revoked Firebase tokens stayed valid until natural expiry (dead revocation branch) | Fixed |
+| 9 | Medium | Unauthenticated admin endpoints mutated global state for all users | Fixed |
 
 ### Finding 1: `/load-model` arbitrary path loading (High)
 
@@ -56,6 +57,12 @@ Every upload endpoint enforced the 10MB `MAX_UPLOAD_SIZE` except the two most us
 `firebase_auth.py` handled `RevokedIdTokenError`, but `verify_id_token(token)` was called without `check_revoked=True`, so that branch could never fire: a revoked token (user signed out everywhere, account disabled) kept working until its natural ~1 hour expiry.
 
 **Fix:** `check_revoked=True` is now passed, making revocation effective at the cost of one extra Firebase round-trip per verification, acceptable at this application's authenticated traffic volume. The auth test suite asserts the flag is present so it cannot silently regress.
+
+### Finding 9: unauthenticated global-state admin endpoints (Medium)
+
+`/set-confidence` and `/load-model` are development tools that no app screen calls, yet both were reachable unauthenticated and mutate global state for every user: one changes the detection threshold app-wide, the other swaps the served model. An anonymous caller could degrade detection for all users with a single request.
+
+**Fix:** both endpoints now only exist when `ADMIN_ENDPOINTS_ENABLED=1` is set (off by default, documented in `.env.example` as dev-only), answering `404` rather than `403` when disabled so their presence isn't advertised. Related cleanups in the same pass: CORS `allow_credentials` turned off (the API is bearer-header-only, so there are no cookies for CORS to share), the OCR key log no longer prints the secret's length, and the 104-line commented-out old `/detect` (whose dead size-check disguised Finding 3) was deleted.
 
 ## 7.3 Hardening Round 2
 

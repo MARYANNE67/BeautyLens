@@ -106,10 +106,12 @@ app = FastAPI(
 # Enable CORS for mobile app
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:19000").split(",")
 
+# allow_credentials stays off: the API authenticates via the Authorization
+# header only (no cookies), so there are no credentials for CORS to share.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -156,9 +158,20 @@ async def health():
 MODELS_DIR = (Path(__file__).resolve().parents[2] / "models").resolve()
 
 
+def _require_admin_endpoints() -> None:
+    """/load-model and /set-confidence are dev tools no app screen calls, yet
+    they mutate global state for every user (swap the served model, change
+    the detection threshold). Least privilege: they only exist when
+    ADMIN_ENDPOINTS_ENABLED=1 is set, and answer 404 (not 403) otherwise so
+    their presence isn't advertised."""
+    if os.getenv("ADMIN_ENDPOINTS_ENABLED") != "1":
+        raise HTTPException(status_code=404, detail="Not Found")
+
+
 @app.post("/load-model")
 async def load_model_endpoint(data: dict):
     """Load a YOLO model from a .pt file inside the models/ directory."""
+    _require_admin_endpoints()
     model_file = data.get("model_file")
     if not model_file:
         raise HTTPException(status_code=400, detail="model_file is required")
@@ -186,112 +199,6 @@ async def load_model_endpoint(data: dict):
         raise HTTPException(status_code=400, detail="Model file could not be loaded")
 
 
-# @app.post("/detect")
-# async def detect_products(
-#     image: UploadFile = File(...),
-#     confidence: Optional[float] = None
-# ):
-#     """
-#     Detect makeup products in uploaded image
-    
-#     Args:
-#         image: Image file (JPEG, PNG, etc.)
-#         confidence: Confidence threshold (0.0-1.0), defaults to global threshold
-    
-#     Returns:
-#         JSON with detections including bounding boxes, classes, and confidence scores
-#     """
-#     if model is None:
-#         raise HTTPException(
-#             status_code=503,
-#             detail="Model not loaded. Please load a model first using /load-model"
-#         )
-    
-#     try:
-#         # Read image file
-#         image_bytes = await image.read()
-
-#         if not image_bytes or len(image_bytes) == 0:
-#             raise HTTPException(status_code=400, detail="Empty image file received")
-
-#         if len(image_bytes) > MAX_UPLOAD_SIZE:
-#             raise HTTPException(status_code=413, detail=f"Image exceeds maximum allowed size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
-
-#         print(f"[API] Received image: {len(image_bytes)} bytes, content_type: {image.content_type}")
-        
-#         # Convert bytes to numpy array
-#         nparr = np.frombuffer(image_bytes, np.uint8)
-#         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-#         if img is None:
-#             print(f"[API] Failed to decode image. First 20 bytes: {image_bytes[:20]}")
-#             raise HTTPException(status_code=400, detail="Invalid image format - could not decode image")
-        
-#         print(f"[API] Image decoded successfully: shape={img.shape}")
-        
-#         # Use provided confidence or default
-#         conf_threshold = confidence if confidence is not None else confidence_threshold
-        
-#         print(f"[API] Running YOLO inference with confidence threshold: {conf_threshold}")
-        
-#         # Run YOLO inference
-#         results = model(img, conf=conf_threshold, verbose=False)
-        
-#         print(f"[API] YOLO inference completed")
-        
-#         # Parse results
-#         detections = []
-#         for result in results:
-#             boxes = result.boxes
-#             for box in boxes:
-#                 # Get box coordinates
-#                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                
-#                 # Get class and confidence
-#                 conf = float(box.conf[0].cpu().numpy())
-#                 class_id = int(box.cls[0].cpu().numpy())
-#                 raw_class_name = result.names[class_id] if hasattr(result, 'names') else f"Class {class_id}"
-                
-#                 # Normalize class name to ProductClass enum
-#                 normalized_class = normalize_class_name(raw_class_name)
-#                 class_name = normalized_class.value if normalized_class else raw_class_name
-#                 display_name = get_display_name(normalized_class) if normalized_class else raw_class_name
-                
-#                 detections.append({
-#                     "class_id": class_id,
-#                     "class_name": class_name,  # Normalized enum value
-#                     "display_name": display_name,  # Human-readable name
-#                     "raw_class_name": raw_class_name,  # Original from model
-#                     "confidence": round(conf, 4),
-#                     "bbox": {
-#                         "x1": float(x1),
-#                         "y1": float(y1),
-#                         "x2": float(x2),
-#                         "y2": float(y2)
-#                     }
-#                 })
-        
-#         print(f"[API] Returning {len(detections)} detections")
-        
-#         return {
-#             "status": "success",
-#             "detections": detections,
-#             "count": len(detections),
-#             "image_shape": {
-#                 "height": int(img.shape[0]),
-#                 "width": int(img.shape[1])
-#             }
-#         }
-        
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         print(f"[API] Detection error: {str(e)}")
-#         import traceback
-#         traceback.print_exc()
-#         raise HTTPException(status_code=500, detail=f"Detection error: {str(e)}")
-
-from src.api.product_recognition import extract_text_from_image_region, parse_product_from_text
 
 @app.post("/detect")
 async def detect_products(
@@ -522,6 +429,7 @@ async def detect_with_annotated_image(
 @app.post("/set-confidence")
 async def set_confidence(data: dict):
     """Set global confidence threshold"""
+    _require_admin_endpoints()
     global confidence_threshold
     threshold = data.get("threshold")
     if threshold is None:
