@@ -418,16 +418,23 @@ function buildARHtml(layers: MakeupLayer[]): string {
         ctx.fillRect(cx - eyeW, lashMidY - lidH*2, eyeW*2, lidH*2);
         ctx.restore();
 
-        // Shimmer: soft central glow (no dots)
+        // Shimmer: soft central glow (no dots). Screen-blended white reads
+        // far stronger on this WebView than the alpha suggests (same lesson
+        // as the lipstick gloss passes) -- keep it low, and tint it toward
+        // the shadow colour instead of pure white so the sheen reads as
+        // shimmer in the product's own colour, not a white spot.
         if(finish === 'shimmer' || finish === 'glitter'){
+          var sr2 = Math.round(r + (255-r)*0.6);
+          var sg2 = Math.round(g + (255-g)*0.6);
+          var sb2 = Math.round(b + (255-b)*0.6);
           ctx.save();
           lidPath(1.0);
           ctx.clip();
           ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = 0.22;
+          ctx.globalAlpha = 0.1;
           var sg = ctx.createRadialGradient(cx, lashMidY-lidH*0.25, 1, cx, lashMidY-lidH*0.25, lidH*0.6);
-          sg.addColorStop(0, 'rgba(255,255,255,0.85)');
-          sg.addColorStop(1, 'rgba(255,255,255,0)');
+          sg.addColorStop(0, 'rgba('+sr2+','+sg2+','+sb2+',0.85)');
+          sg.addColorStop(1, 'rgba('+sr2+','+sg2+','+sb2+',0)');
           ctx.fillStyle = sg;
           lidPath(1.0);
           ctx.fill();
