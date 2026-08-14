@@ -94,8 +94,31 @@ export function resolveLayer(productType: string, overrideColor?: string): Makeu
 
 // ─── HTML ────────────────────────────────────────────────────────────────────
 
+const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
+const KNOWN_FINISHES = new Set(['matte', 'shimmer', 'glossy', 'glitter']);
+const KNOWN_CATEGORIES = new Set(['lipstick', 'eyeshadow', 'eyeliner', 'mascara', 'blush', 'foundation']);
+
+/**
+ * The layers array is embedded inside the WebView's <script> block, and its
+ * colour strings originate from untrusted data (the third-party makeup API's
+ * hex_value fields, OCR'd shade text). A value like "</script><script>..."
+ * would break out of the script context and execute inside a WebView that
+ * holds a live camera stream, so every field is validated against a strict
+ * whitelist before embedding, and "<" is escaped in the JSON as a second
+ * layer of defence.
+ */
+function sanitizeLayers(layers: MakeupLayer[]): MakeupLayer[] {
+  return layers
+    .filter((l) => KNOWN_CATEGORIES.has(l.category))
+    .map((l) => ({
+      category: l.category,
+      color: HEX_COLOR.test(l.color) ? l.color : '#C2185B',
+      finish: l.finish && KNOWN_FINISHES.has(l.finish) ? l.finish : 'matte',
+    }));
+}
+
 function buildARHtml(layers: MakeupLayer[]): string {
-  const layersJson = JSON.stringify(layers);
+  const layersJson = JSON.stringify(sanitizeLayers(layers)).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html>
 <html lang="en">

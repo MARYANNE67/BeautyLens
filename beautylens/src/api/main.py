@@ -142,22 +142,41 @@ async def health():
     }
 
 
+# Directory model files may be loaded from. Everything outside it is refused:
+# .pt files are pickle-based, so YOLO(path) on an attacker-chosen path is a
+# code-execution primitive, and per-path error messages would double as a
+# filesystem-probing oracle on an unauthenticated endpoint.
+MODELS_DIR = (Path(__file__).resolve().parents[2] / "models").resolve()
+
+
 @app.post("/load-model")
 async def load_model_endpoint(data: dict):
-    """Load a YOLO model from a file path"""
+    """Load a YOLO model from a .pt file inside the models/ directory."""
+    model_file = data.get("model_file")
+    if not model_file:
+        raise HTTPException(status_code=400, detail="model_file is required")
+
+    requested = (MODELS_DIR / model_file).resolve() if not os.path.isabs(model_file) \
+        else Path(model_file).resolve()
+    # Path.is_relative_to also rejects ../ traversal after resolution.
+    if not requested.is_relative_to(MODELS_DIR) or requested.suffix != ".pt":
+        # Deliberately generic: don't confirm or deny anything about paths
+        # outside the allowed directory.
+        raise HTTPException(status_code=400, detail="model_file must be a .pt file inside the models directory")
+
+    if not requested.exists():
+        raise HTTPException(status_code=404, detail="Model file not found in the models directory")
+
     try:
-        model_file = data.get("model_file")
-        if not model_file:
-            raise HTTPException(status_code=400, detail="model_file is required")
-        
-        load_model(model_file)
+        load_model(str(requested))
         return {
             "status": "success",
-            "message": f"Model loaded: {model_file}",
-            "model_path": model_path
+            "message": f"Model loaded: {requested.name}",
+            "model_path": model_path,
         }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        # Loader errors can embed absolute paths; keep them out of responses.
+        raise HTTPException(status_code=400, detail="Model file could not be loaded")
 
 
 # @app.post("/detect")
@@ -272,9 +291,20 @@ async def detect_products(
     image: UploadFile = File(...),
     confidence: float = 0.25,
 ):
+    # Same bounds /set-confidence enforces -- this endpoint's own confidence
+    # query param previously accepted any float.
+    if not 0 < confidence <= 1:
+        raise HTTPException(status_code=400, detail="confidence must be between 0 and 1")
+
     contents = await image.read()
     if not contents:
         raise HTTPException(status_code=400, detail="Empty image file received")
+
+    if len(contents) > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image exceeds maximum allowed size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB",
+        )
 
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
@@ -361,6 +391,12 @@ async def detect_product_brand(
     contents = await image.read()
     if not contents:
         raise HTTPException(status_code=400, detail="Empty image file")
+
+    if len(contents) > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image exceeds maximum allowed size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB",
+        )
 
     bbox = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
 
