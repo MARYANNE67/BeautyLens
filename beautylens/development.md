@@ -198,6 +198,61 @@ git diff <old-commit> <new-commit> -- package.json
 Any new entry there (other than a pure-JS/TypeScript-only package) is a signal
 to regenerate.
 
+## Deployment (Hugging Face Spaces, free tier)
+
+The backend deploys as a Docker Space. The repo root has the `Dockerfile`,
+`.dockerignore`, and HF frontmatter in `README.md`; `beautylens/deploy/`
+has the container entrypoint and the artifact fetcher.
+
+Two artifacts are deliberately not in git and are fetched from a Hugging
+Face **model repo** at container start (`deploy/fetch_artifacts.py`):
+the YOLO weights (`best.pt`) and the shade catalog
+(`shade_catalog_seed.json`).
+
+One-time setup (from the repo root, with the artifacts built locally):
+
+```bash
+pip install huggingface_hub
+huggingface-cli login                # paste a WRITE token from hf.co/settings/tokens
+huggingface-cli repo create beautylens-artifacts --type model
+huggingface-cli upload YOUR_USERNAME/beautylens-artifacts beautylens/models/final/best.pt best.pt
+huggingface-cli upload YOUR_USERNAME/beautylens-artifacts beautylens/data/shade_catalog_seed.json shade_catalog_seed.json
+```
+
+Create a **Docker Space** at huggingface.co/new-space, then in the Space's
+Settings add secrets:
+
+- `HF_MODEL_REPO` = `YOUR_USERNAME/beautylens-artifacts`
+- `HF_TOKEN` = a READ token (only if the artifact repo is private)
+- `FIREBASE_CREDENTIALS_JSON` = the whole service-account JSON on one line
+- `GOOGLE_VISION_API_KEY` = the Vision key (optional; OCR degrades gracefully)
+- `ALLOWED_ORIGINS` = origins allowed by CORS
+
+Do NOT set `ADMIN_ENDPOINTS_ENABLED` or `RATE_LIMIT_DISABLED` in
+production; the defaults (admin endpoints off, rate limiting on) are the
+safe ones.
+
+Deploy by pushing this repo to the Space:
+
+```bash
+git remote add space https://huggingface.co/spaces/YOUR_USERNAME/beautylens-api
+git push space deploy/huggingface:main
+```
+
+Then point the app at it and build:
+
+```bash
+# beautylens/.env
+EXPO_PUBLIC_API_BASE_URL_PROD=https://YOUR_USERNAME-beautylens-api.hf.space
+npx eas build -p android --profile preview
+```
+
+**Known limitation (free tier):** no persistent disk, so the SQLite
+database resets when the Space restarts. The shade catalog reseeds itself
+automatically at startup; user profiles and scans do not survive a
+restart. Attaching HF persistent storage (paid) and pointing
+`DATABASE_PATH` at the mount removes this limitation with no code change.
+
 ## Shade Matching Flow
 
 The path a user takes, and where each step lives:

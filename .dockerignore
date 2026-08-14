@@ -1,0 +1,20 @@
+# Keep the build context small and free of local-only state. Note the model
+# weights and shade catalog are ALSO excluded: production images fetch both
+# from the Hugging Face artifact repo at startup (deploy/fetch_artifacts.py),
+# so local and Space builds behave identically.
+**/node_modules
+**/.venv
+**/venv
+**/.expo
+**/ios
+**/.git
+**/__pycache__
+**/.pytest_cache
+beautylens/beautylens.db
+beautylens/.coverage
+beautylens/.env
+beautylens/models
+beautylens/data/sources
+beautylens/data/shade_catalog_seed.json
+beautylens/tests/fixtures
+docs

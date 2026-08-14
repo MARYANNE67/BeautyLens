@@ -1,3 +1,13 @@
+---
+title: BeautyLens API
+emoji: 💄
+colorFrom: pink
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # BeautyLens: Makeup Product Detection & Virtual Try-On Platform
 
 ## Demo Video
