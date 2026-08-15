@@ -1,4 +1,4 @@
-# BeautyLens: Makeup Product Detection & Virtual Try-On Platform
+# BeautyLens: Makeup Detection, Shade Matching & AR Try-On Platform
 
 ## Team Information
 
