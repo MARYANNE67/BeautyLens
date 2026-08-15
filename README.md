@@ -1,4 +1,4 @@
-# BeautyLens: Makeup Product Detection & Virtual Try-On Platform
+# BeautyLens: Makeup Detection, Shade Matching & AR Try-On Platform
 
 ## Team Information
 
@@ -8,9 +8,9 @@
 | Chloe Quijano | cquijano@myseneca.ca | Full Stack Developer / Tech Lead |
 | Mary-Anne Ibeh | mibeh@myseneca.ca | Full Stack Developer / Tech Lead |
 
-**Course:** SED800 Capstone II — 2026
-**Instructors:** Miguel Watler, Marcel Jar
-**Repository:** https://github.com/MARYANNE67/BeautyLens
+- **Course:** SED800 Capstone II — 2026
+- **Instructors:** Miguel Watler, Marcel Jar
+- **Repository:** https://github.com/MARYANNE67/BeautyLens
 
 ## Project Description
 
