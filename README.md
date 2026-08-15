@@ -1,11 +1,5 @@
 # BeautyLens: Makeup Product Detection & Virtual Try-On Platform
 
-## Demo Video
-
-[Watch the BeautyLens demo](docs/demo/beautylens-demo.mp4)
-
-[Watch the high-quality demo video](https://drive.google.com/file/d/1cXBnFsfSndY1Y2Fs73ttZslG67bkK4SA/view?usp=sharing)
-
 ## Team Information
 
 | Name | Email | Role |
@@ -16,7 +10,7 @@
 
 **Course:** SED800 Capstone II — 2026
 **Instructors:** Miguel Watler, Marcel Jar
-**Repository:** https://github.com/SED800/SkillCred
+**Repository:** https://github.com/MARYANNE67/BeautyLens
 
 ## Project Description
 
@@ -24,7 +18,7 @@ BeautyLens is a computer vision and augmented reality application that allows us
 
 The system is built on a YOLOv8s object-detection model fine-tuned on a 2,715-image, 19-class makeup dataset, a MediaPipe Face Mesh engine returning 468 3D facial landmarks, a FastAPI backend, and a React Native mobile application. The application is being developed to production standards suitable for deployment in a real beauty retail environment.
 
-The codebase originates from the SkillCred project developed in Capstone I. The FastAPI backend, Docker Compose deployment, SQLite persistence layer, and project management artefacts all transfer directly into BeautyLens. Capstone II focuses on completing the AR try-on feature, reaching production-grade model accuracy (mAP@0.5 ≥ 0.70), and delivering a UI and user experience suitable for a live beauty store deployment.
+The codebase originates from the SkillCred project developed in Capstone I; the FastAPI backend, SQLite persistence layer, and project management artefacts carried over. Capstone II delivered the live AR try-on and face-shape placement tutorial (both on client-side face tracking), cross-brand shade matching from a guided skin scan, a 276-test backend and 119-test frontend suite run in CI, a security audit with fixes, and a Dockerized deployment to Google Cloud Run verified end-to-end from a physical phone. The remaining model-accuracy target (mAP@0.5 ≥ 0.70) is tracked in the issue backlog — see docs/Handoff.md.
 
 ## Features
 
@@ -34,6 +28,15 @@ The codebase originates from the SkillCred project developed in Capstone I. The 
 - **Face-shape placement tutorial**: live contour/concealer/highlighter/blush/bronzer placement guidance, keyed to a face shape classified from measured facial ratios, with the same client-side face-tracking approach as AR try-on.
 - **Collection tracking**: save shades from recommendations, track opened/printed expiry dates, and get reminders before a product should be retired.
 - **Accounts**: Firebase authentication with an editable profile (display name, beauty preferences).
+
+## Documentation
+
+- [Development guide](beautylens/development.md) — local setup, running backend/frontend, iOS rebuild gotchas
+- [Testing](docs/Testing.md) — unit/integration/system/acceptance testing (395 automated tests)
+- [Security audit](docs/SecurityAudit.md) — findings, fixes, accepted risks, CI scanners
+- [Deployment guide](docs/Deployment.md) — Cloud Run backend, phone installs, troubleshooting
+- [Handoff](docs/Handoff.md) — pending work, known limitations, operational details
+- [Third-party notices](NOTICE.md) and [LICENSE](LICENSE)
 
 ## Firebase Setup
 
