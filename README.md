@@ -29,6 +29,14 @@ The codebase originates from the SkillCred project developed in Capstone I; the 
 - **Collection tracking**: save shades from recommendations, track opened/printed expiry dates, and get reminders before a product should be retired.
 - **Accounts**: Firebase authentication with an editable profile (display name, beauty preferences).
 
+## Datasets
+
+- **Product detection training set** — 2,715 team-collected product images across all 19 makeup classes, annotated in [Roboflow](https://roboflow.com) with YOLO-format labels (details and per-class notes in [docs/README_TEAM.md](docs/README_TEAM.md)).
+- **Shade catalog** — ~5,100 foundation and concealer shades built from the measured swatch colours in [The Pudding's open "foundation-names" dataset](https://github.com/the-pudding/data/tree/master/foundation-names); the build script is `beautylens/data/build_catalog_from_shades.py`.
+- **Runtime shade data** — the open [Makeup API](https://makeup-api.herokuapp.com) supplies real per-product shade lists for the try-on shade picker.
+
+Full third-party attributions, including model and framework licenses, are in [NOTICE.md](NOTICE.md).
+
 ## Documentation
 
 - [Development guide](beautylens/development.md) — local setup, running backend/frontend, iOS rebuild gotchas
