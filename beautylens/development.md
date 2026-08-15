@@ -184,6 +184,14 @@ npx expo prebuild --clean -p ios
 cd ios && pod install
 ```
 
+**Free-Apple-account bundle IDs:** Apple permanently ties a bundle
+identifier to the first (personal) team that registers it. The committed
+`ios.bundleIdentifier` may therefore be claimed by a teammate already -- if
+Xcode shows "Failed Registering Bundle Identifier", change
+`ios.bundleIdentifier` in `app.json` to something unique to you (e.g.
+`com.YOURNAME.beautylens`), regenerate `ios/`, and do NOT commit that change
+(it would break the teammate who owns the committed id).
+
 Then open **`ios/beautylens.xcworkspace`** in Xcode — not `.xcodeproj`.
 CocoaPods dependencies only link through the workspace; opening the project
 file directly is the other common source of the same class of error.
@@ -197,6 +205,23 @@ git diff <old-commit> <new-commit> -- package.json
 
 Any new entry there (other than a pure-JS/TypeScript-only package) is a signal
 to regenerate.
+
+## Deployment
+
+The full deployment guide lives in [`docs/Deployment.md`](../docs/Deployment.md):
+backend to Google Cloud Run (Docker, scale-to-zero, Firebase via service
+identity, artifacts baked into the image), phone installs (iOS free-account
+cable builds, Android EAS APK), operations, and a troubleshooting table of
+every failure hit during the reference deployment.
+
+Quick redeploy after backend changes, from the repo root:
+
+```bash
+gcloud run deploy beautylens-api --source . --region us-central1 \
+  --allow-unauthenticated --memory 2Gi --cpu 2 --max-instances 1 --cpu-boost \
+  --set-env-vars "HF_MODEL_REPO=YOUR_HF_USER/beautylens-artifacts,FIREBASE_PROJECT_ID=YOUR_FIREBASE_PROJECT_ID" \
+  --quiet
+```
 
 ## Shade Matching Flow
 

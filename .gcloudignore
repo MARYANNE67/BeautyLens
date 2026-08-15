@@ -1,0 +1,17 @@
+# Upload context for `gcloud run deploy --source .` -- mirror of .dockerignore.
+# The model weights and shade catalog are INCLUDED so they get baked into the
+# image (see .dockerignore for why).
+.git
+**/node_modules
+**/.venv
+**/venv
+**/.expo
+**/ios
+**/__pycache__
+**/.pytest_cache
+beautylens/beautylens.db
+beautylens/.coverage
+beautylens/.env
+beautylens/data/sources
+beautylens/tests/fixtures
+docs

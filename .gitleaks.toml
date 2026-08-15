@@ -1,0 +1,14 @@
+# Gitleaks config: default rules plus one scoped exception.
+[extend]
+useDefault = true
+
+# eas.json intentionally contains the six EXPO_PUBLIC_FIREBASE_* web-config
+# values, including the API key that trips the gcp-api-key rule. Firebase
+# web API keys are public client configuration, not secrets: they ship
+# inside every app binary, and access control is enforced by Firebase
+# security rules and authorized domains, not key secrecy. They live in
+# eas.json because .env is gitignored and never reaches EAS build servers.
+# Scoped to this one file so real secrets anywhere else still fail the scan.
+[allowlist]
+description = "Firebase web-config values in EAS build profiles are public client config"
+paths = ['''beautylens/eas\.json''']

@@ -1,0 +1,19 @@
+# Keep the build context small and free of local-only state. The model
+# weights and shade catalog are deliberately INCLUDED: baking them into the
+# image keeps cold starts off the network entirely (anonymous HF downloads
+# from cloud IPs are rate-limited and blew Cloud Run's startup deadline).
+# deploy/fetch_artifacts.py remains the fallback when they're absent.
+**/node_modules
+**/.venv
+**/venv
+**/.expo
+**/ios
+**/.git
+**/__pycache__
+**/.pytest_cache
+beautylens/beautylens.db
+beautylens/.coverage
+beautylens/.env
+beautylens/data/sources
+beautylens/tests/fixtures
+docs
